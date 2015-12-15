@@ -1,0 +1,9 @@
+---
+eloss_path: /Users/josh/Documents/Code/ar40-aug15/monte_carlo/eloss.h5
+lut_path: /Users/josh/Documents/Code/ar40-aug15/monte_carlo/LUT.h5
+efield: [0, 0, 9e3]
+bfield: [0, 0, -2]
+mass_num: 1
+charge_num: 1
+vd: [0, 0, 5.2]
+clock: 12.5
