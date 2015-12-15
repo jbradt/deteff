@@ -1,6 +1,8 @@
 ---
 eloss_path: /Users/josh/Documents/Code/ar40-aug15/monte_carlo/eloss.h5
 lut_path: /Users/josh/Documents/Code/ar40-aug15/monte_carlo/LUT.h5
+xcfg_path: /Users/josh/Documents/Data/Meta/e15503b/configs/run_0077/configure-e15503b.xcfg
+padmap_path: /Users/josh/Documents/Data/Meta/e15503b/Lookup20150611.csv
 efield: [0, 0, 9e3]
 bfield: [0, 0, -2]
 mass_num: 1

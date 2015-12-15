@@ -1,4 +1,5 @@
 #include "../mcopt/mcopt.h"
+#include "PadMap.h"
 #include <armadillo>
 #include <yaml-cpp/yaml.h>
 #include <H5Cpp.h>
@@ -10,6 +11,7 @@
 #include <set>
 #include <sqlite3.h>
 #include <pugixml.hpp>
+#include <algorithm>
 
 class MissingConfigKey : public std::exception
 {
@@ -21,75 +23,27 @@ private:
     std::string msg;
 };
 
-auto parseConfig(const std::string& path)
-{
-    YAML::Node config = YAML::LoadFile(path);
-    std::vector<double> efieldVec;
-    std::vector<double> bfieldVec;
+namespace YAML {
+    template<>
+    struct convert<arma::vec> {
+        static Node encode(const arma::vec& rhs) {
+            Node node;
+            for (const auto item : rhs) {
+                node.push_back(item);
+            }
+            return node;
+        }
 
-    if (config["efield"]) {
-        efieldVec = config["efield"].as<decltype(efieldVec)>();
-    }
-    else {
-        efieldVec = {0, 0, 0};
-    }
+        static bool decode(const Node& node, arma::vec& rhs) {
+            if(!node.IsSequence()) return false;
 
-    if (config["bfield"]) {
-        bfieldVec = config["bfield"].as<decltype(bfieldVec)>();
-    }
-    else {
-        bfieldVec = {0, 0, 0};
-    }
-
-    arma::vec efield (efieldVec);
-    arma::vec bfield (bfieldVec);
-
-    std::string elossPath;
-
-    if (config["eloss_path"]) {
-        elossPath = config["eloss_path"].as<decltype(elossPath)>();
-    }
-    else {
-        throw MissingConfigKey("Key eloss_path was missing.");
-    }
-
-    std::string lutPath;
-
-    if (config["lut_path"]) {
-        lutPath = config["lut_path"].as<decltype(lutPath)>();
-    }
-    else {
-        throw MissingConfigKey("Key lut_path was missing.");
-    }
-
-    unsigned massNum = 1;
-    unsigned chargeNum = 1;
-
-    if (config["mass_num"]) {
-        massNum = config["mass_num"].as<decltype(massNum)>();
-    }
-    if (config["charge_num"]) {
-        chargeNum = config["charge_num"].as<decltype(chargeNum)>();
-    }
-
-    std::vector<double> vdVec;
-
-    if (config["vd"]) {
-        vdVec = config["vd"].as<decltype(vdVec)>();
-    }
-    else {
-        vdVec = {0, 0, 1};
-    }
-
-    arma::vec vd (vdVec);
-
-    double clock = 0;
-
-    if (config["clock"]) {
-        clock = config["clock"].as<decltype(clock)>();
-    }
-
-    return std::make_tuple(efield, bfield, elossPath, lutPath, massNum, chargeNum, vd, clock);
+            rhs.set_size(node.size());
+            for (int i = 0; i < node.size(); i++) {
+                rhs(i) = node[i].as<double>();
+            }
+            return true;
+        }
+    };
 }
 
 std::vector<double> readEloss(const std::string& path)
@@ -260,6 +214,45 @@ void SQLWriter::writeResult(const arma::uword idx, const int trig)
     update_stmt = NULL;
 }
 
+std::vector<std::vector<int>> parseXcfg(const std::string& path)
+{
+    pugi::xml_document doc;
+    doc.load_file(path.c_str());
+
+    std::vector<std::vector<int>> result;
+
+    auto cobos = doc.select_nodes("//Node[@id='CoBo']/Instance[@id!='*']");
+
+    for (auto& cobo : cobos) {
+        std::string coboId = cobo.node().attribute("id").value();
+        // std::cout << coboId << std::endl;
+        auto asads = cobo.node().select_nodes("AsAd[@id!='*']");
+        for (auto& asad : asads) {
+            std::string asadId = asad.node().attribute("id").value();
+                // std::cout << "  " << asadId << std::endl;
+            auto agets = asad.node().select_nodes("Aget[@id!='*']");
+            for (auto& aget : agets) {
+                std::string agetId = aget.node().attribute("id").value();
+                // std::cout << "    " << agetId << std::endl;
+                auto channels = aget.node().select_nodes("channel[@id!='*']");
+                for (auto& channel : channels) {
+                    std::string channelId = channel.node().attribute("id").value();
+                    // std::cout << "      " << channelId << std::endl;
+                    auto trig = channel.node().select_node("TriggerInhibition");
+                    if (trig) {
+                        auto text = trig.node().text();
+                        if (text && strcmp(text.get(), "inhibit_trigger") == 0) {
+                            std::vector<int> addr = {stoi(coboId), stoi(asadId), stoi(agetId), stoi(channelId)};
+                            result.push_back(addr);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
 int main(const int argc, const char** argv)
 {
     if (argc < 3) {
@@ -270,25 +263,31 @@ int main(const int argc, const char** argv)
     const std::string configPath = argv[1];
     const std::string outPath = argv[2];
 
-    arma::vec efield;
-    arma::vec bfield;
-    std::string elossPath;
-    std::string lutPath;
-    unsigned massNum = 0;
-    unsigned chargeNum = 0;
-    arma::vec vd;
-    double clock = 0;
+    YAML::Node config = YAML::LoadFile(configPath);
 
-    try {
-        std::tie(efield, bfield, elossPath, lutPath, massNum, chargeNum, vd, clock) = parseConfig(configPath);
-    }
-    catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return 1;
-    }
+    arma::vec efield = config["efield"].as<arma::vec>();
+    arma::vec bfield = config["bfield"].as<arma::vec>();
+    std::string elossPath = config["eloss_path"].as<std::string>();
+    std::string lutPath = config["lut_path"].as<std::string>();
+    std::string xcfgPath = config["xcfg_path"].as<std::string>();
+    std::string padmapPath = config["padmap_path"].as<std::string>();
+    unsigned massNum = config["mass_num"].as<unsigned>();
+    unsigned chargeNum = config["charge_num"].as<unsigned>();
+    arma::vec vd = config["vd"].as<arma::vec>();
+    double clock = config["clock"].as<double>();
 
     std::vector<double> eloss = readEloss(elossPath);
     arma::Mat<uint16_t> lut = readLUT(lutPath);
+    PadMap padmap (padmapPath);
+
+    auto exclAddrs = parseXcfg(xcfgPath);
+    std::set<uint16_t> exclPads;
+    for (const auto& addr : exclAddrs) {
+        uint16_t pad = padmap.find(addr.at(0), addr.at(1), addr.at(2), addr.at(3));
+        if (pad != padmap.missingValue) {
+            exclPads.insert(pad);
+        }
+    }
 
     PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001);
 
@@ -308,8 +307,17 @@ int main(const int argc, const char** argv)
     for (arma::uword i = 0; i < params.n_rows; i++) {
         auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                       params(i, 5));
-        auto hits = findHitPads(pads, tr, vd, clock);
-        bool result = hits.size() > 1;
+        std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);
+        std::set<uint16_t> commonHits;
+        std::set_difference(hits.begin(), hits.end(),
+                            exclPads.begin(), exclPads.end(),
+                            std::inserter(commonHits, commonHits.begin()));
+
+        for (auto p : commonHits) {
+            std::cout << p << ", ";
+        }
+        std::cout << std::endl;
+        bool result = commonHits.size() > 1;
         writer.writeResult(i, result);
     }
 
