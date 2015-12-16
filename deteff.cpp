@@ -69,13 +69,7 @@ int main(const int argc, const char** argv)
         std::set_difference(hits.begin(), hits.end(),
                             exclPads.begin(), exclPads.end(),
                             std::inserter(commonHits, commonHits.begin()));
-
-        for (auto p : commonHits) {
-            std::cout << p << ", ";
-        }
-        std::cout << std::endl;
-        bool result = commonHits.size() > 1;
-        writer.writeResult(i, result);
+        writer.writeResult(i, commonHits.size());
     }
 
     return 0;

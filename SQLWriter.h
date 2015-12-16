@@ -24,7 +24,7 @@ public:
 
     void createTable();
     void writeParameters(const arma::mat& params);
-    void writeResult(const arma::uword idx, const int trig);
+    void writeResult(const arma::uword idx, const unsigned long numHit);
 
 private:
     sqlite3* db;

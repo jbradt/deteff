@@ -20,7 +20,7 @@ void SQLWriter::createTable()
 {
     const std::string create_sql =
         "CREATE TABLE deteff (i INTEGER UNIQUE, x0 REAL, y0 REAL, z0 REAL, enu0 REAL, azi0 REAL, pol0 REAL, "
-                             "trig INTEGER);";
+                             "numHit INTEGER);";
     int status = sqlite3_exec(db, create_sql.c_str(), NULL, NULL, NULL);
     if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
 }
@@ -32,7 +32,7 @@ void SQLWriter::writeParameters(const arma::mat& params)
     int status = 0;
     sqlite3_stmt* insert_stmt = NULL;
     const std::string insert_sql =
-    "INSERT INTO deteff VALUES (:i, :x0, :y0, :z0, :enu0, :azi0, :pol0, :trig);";
+    "INSERT INTO deteff VALUES (:i, :x0, :y0, :z0, :enu0, :azi0, :pol0, :numHit);";
 
     try {
         status = sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
@@ -42,7 +42,7 @@ void SQLWriter::writeParameters(const arma::mat& params)
 
         for (arma::uword i = 0; i < params.n_rows; i++) {
             // Assume params has columns x, y, z, en, azi, pol
-            status = sqlite3_bind_int(insert_stmt, 1, i);
+            status = sqlite3_bind_int64(insert_stmt, 1, i);
             if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
 
             for (arma::uword j = 0; j < params.n_cols; j++) {
@@ -57,7 +57,7 @@ void SQLWriter::writeParameters(const arma::mat& params)
             sqlite3_clear_bindings(insert_stmt);
         }
     }
-    catch (const DBError& e) {
+    catch (const DBError&) {
         sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
         sqlite3_finalize(insert_stmt);
         insert_stmt = NULL;
@@ -69,25 +69,25 @@ void SQLWriter::writeParameters(const arma::mat& params)
     insert_stmt = NULL;
 }
 
-void SQLWriter::writeResult(const arma::uword idx, const int trig)
+void SQLWriter::writeResult(const arma::uword idx, const unsigned long numHit)
 {
     int status = 0;
-    const std::string update_sql = "UPDATE deteff SET trig=? WHERE i=?;";
+    const std::string update_sql = "UPDATE deteff SET numHit=? WHERE i=?;";
     sqlite3_stmt* update_stmt = NULL;
 
     try {
         status = sqlite3_prepare_v2(db, update_sql.c_str(), -1, &update_stmt, NULL);
         if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
 
-        status = sqlite3_bind_int(update_stmt, 2, idx);
+        status = sqlite3_bind_int64(update_stmt, 2, idx);
         if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
-        status = sqlite3_bind_int(update_stmt, 1, trig);
+        status = sqlite3_bind_int64(update_stmt, 1, numHit);
         if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
 
         status = sqlite3_step(update_stmt);
         if (status != SQLITE_DONE) throw DBError(sqlite3_errmsg(db));
     }
-    catch (const DBError& e) {
+    catch (const DBError&) {
         sqlite3_finalize(update_stmt);
         update_stmt = NULL;
         throw;
