@@ -2,6 +2,17 @@
 #include <cassert>
 
 SQLWriter::SQLWriter(const std::string& path)
+: path(path)
+{
+    int status = 0;
+    status = sqlite3_open(path.c_str(), &db);
+    if (status != SQLITE_OK) {
+        throw DBError(sqlite3_errmsg(db));
+    }
+}
+
+SQLWriter::SQLWriter(const SQLWriter& rhs)
+: path(rhs.path)
 {
     int status = 0;
     status = sqlite3_open(path.c_str(), &db);
@@ -93,6 +104,45 @@ void SQLWriter::writeResult(const arma::uword idx, const unsigned long numHit)
         throw;
     }
 
+    sqlite3_finalize(update_stmt);
+    update_stmt = NULL;
+}
+
+void SQLWriter::writeResults(const std::vector<std::pair<unsigned long, size_t>>& results)
+{
+    int status = 0;
+    sqlite3_stmt* update_stmt = NULL;
+    const std::string update_sql =
+        "UPDATE deteff SET numHit=? WHERE i=?;";
+
+    try {
+        status = sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+
+        status = sqlite3_prepare_v2(db, update_sql.c_str(), -1, &update_stmt, NULL);
+        if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+
+        for (const auto& res : results) {
+            status = sqlite3_bind_int64(update_stmt, 2, res.first);
+            if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+            status = sqlite3_bind_int64(update_stmt, 1, res.second);
+            if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+
+            status = sqlite3_step(update_stmt);
+            if (status != SQLITE_DONE) {
+                std::cerr << "Insertion failed: " << sqlite3_errmsg(db) << std::endl;
+            }
+            sqlite3_reset(update_stmt);
+            sqlite3_clear_bindings(update_stmt);
+        }
+    }
+    catch (const DBError&) {
+        sqlite3_exec(db, "ROLLBACK;", NULL, NULL, NULL);
+        sqlite3_finalize(update_stmt);
+        update_stmt = NULL;
+        throw;
+    }
+
+    sqlite3_exec(db, "COMMIT;", NULL, NULL, NULL);
     sqlite3_finalize(update_stmt);
     update_stmt = NULL;
 }

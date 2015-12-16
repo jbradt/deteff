@@ -76,15 +76,36 @@ int main(const int argc, const char** argv)
 
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
-    for (arma::uword i = 0; i < params.n_rows; i++) {
-        auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
-                                      params(i, 5));
-        std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);
-        std::set<uint16_t> validHits;  // The pads that were hit and not excluded
-        std::set_difference(hits.begin(), hits.end(),
-                            exclPads.begin(), exclPads.end(),
-                            std::inserter(validHits, validHits.begin()));
-        writer.writeResult(i, validHits.size());
+
+    std::vector<std::pair<unsigned long, size_t>> results;
+
+    #pragma omp parallel private(results)
+    {
+        #pragma omp for
+        for (arma::uword i = 0; i < params.n_rows; i++) {
+            auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
+                                          params(i, 5));
+            std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);
+            std::set<uint16_t> validHits;  // The pads that were hit and not excluded
+            std::set_difference(hits.begin(), hits.end(),
+                                exclPads.begin(), exclPads.end(),
+                                std::inserter(validHits, validHits.begin()));
+            results.push_back(std::make_pair<unsigned long, size_t>(i, validHits.size()));
+
+            if (results.size() >= 1000) {
+                #pragma omp critical
+                {
+                    std::cout << "Results length: " << results.size() << std::endl;
+                }
+                writer.writeResults(results);
+                results.clear();
+            }
+        }
+        writer.writeResults(results);
+        #pragma omp critical
+        {
+            std::cout << "Results length: " << results.size() << std::endl;
+        }
     }
 
     return 0;

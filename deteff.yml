@@ -17,7 +17,7 @@ clock: 12.5
 
 # Distribution parameters
 
-dist_num_pts: 100
+dist_num_pts: 10010
 
 # Values: [x, y, z,   enu, azi, pol]
 # Units:  [m, m, m, MeV/u, deg, deg]
