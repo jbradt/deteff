@@ -10,5 +10,5 @@ include_directories(SYSTEM ${SQLITE3_INCLUDE_DIRS})
 find_package(pugixml REQUIRED)
 include_directories(SYSTEM ${pugixml_INCLUDE_DIRS})
 
-add_executable(deteff deteff.cpp PadMap.cpp)
+add_executable(deteff deteff.cpp PadMap.cpp parsers.cpp SQLWriter.cpp)
 target_link_libraries(deteff mcopt pugixml ${HDF5_CXX_LIBRARIES} ${ARMADILLO_LIBRARIES} ${YAMLCPP_LIBRARY} ${SQLITE3_LIBRARIES})
