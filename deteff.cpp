@@ -42,6 +42,8 @@ int main(const int argc, const char** argv)
     unsigned chargeNum = config["charge_num"].as<unsigned>();
     arma::vec vd = config["vd"].as<arma::vec>();
     double clock = config["clock"].as<double>();
+    double tilt = config["tilt"].as<double>() * M_PI / 180;
+    arma::vec beamCtr = config["beam_center"].as<arma::vec>() / 1000;  // Need to convert to meters
 
     // Read the energy loss data from the given path
     std::string elossPath = config["eloss_path"].as<std::string>();
@@ -51,8 +53,9 @@ int main(const int argc, const char** argv)
     // hardware address -> pad number, and the lookup table (LUT), which maps
     // position on the Micromegas to pad number.
     std::string lutPath = config["lut_path"].as<std::string>();
+    double padRotAngle = config["pad_rot_angle"].as<double>() * M_PI / 180;
     arma::Mat<uint16_t> lut = readLUT(lutPath);
-    PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001);
+    PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001, padRotAngle);
     std::string padmapPath = config["padmap_path"].as<std::string>();
     PadMap padmap (padmapPath);
 
@@ -103,8 +106,9 @@ int main(const int argc, const char** argv)
         for (arma::uword i = 0; i < params.n_rows; i++) {
             auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                           params(i, 5));
-            std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);
-            std::set<uint16_t> validHits;  // The pads that were hit and not excluded
+            tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
+            std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);  // Includes uncalibration
+            std::set<uint16_t> validHits;  // The pads that were hit and not excluded or low-gain
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
                                 std::inserter(validHits, validHits.begin()));

@@ -8,12 +8,16 @@ padmap_path: /Users/josh/Documents/Data/Meta/e15503b/Lookup20150611.csv
 
 # Simulation conditions
 
-efield: [0, 0, 9e3]
-bfield: [0, 0, -2]
+efield: [0., -940.756, 8950.697]
+bfield: [0, 0, 1.755424]
 mass_num: 1
 charge_num: 1
-vd: [0, 0, 5.2]
+vd: [-0.05307544, -0.53536606, -5.14373076]
 clock: 12.5
+tilt: 6.0  # in degrees
+pad_rot_angle: -108  # in degrees
+
+beam_center: [-10, -104.5, 144]  # in mm
 
 # Distribution parameters
 
