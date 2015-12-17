@@ -8,7 +8,19 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <tuple>
 
+std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs, const PadMap& padmap)
+{
+    std::set<uint16_t> pads;
+    for (const auto& addr : addrs) {
+        uint16_t pad = padmap.find(addr.at(0), addr.at(1), addr.at(2), addr.at(3));
+        if (pad != padmap.missingValue) {
+            pads.insert(pad);
+        }
+    }
+    return pads;
+}
 
 int main(const int argc, const char** argv)
 {
@@ -59,14 +71,20 @@ int main(const int argc, const char** argv)
 
     // Parse the GET config file. This gives us the set of pads excluded from the trigger.
     std::string xcfgPath = config["xcfg_path"].as<std::string>();
-    auto exclAddrs = parseXcfg(xcfgPath);
-    std::set<uint16_t> exclPads;
-    for (const auto& addr : exclAddrs) {
-        uint16_t pad = padmap.find(addr.at(0), addr.at(1), addr.at(2), addr.at(3));
-        if (pad != padmap.missingValue) {
-            exclPads.insert(pad);
-        }
-    }
+    XcfgParseResult xcfgData = parseXcfg(xcfgPath);
+    std::set<uint16_t> exclPads = convertAddrsToPads(xcfgData.exclAddrs, padmap);
+    std::set<uint16_t> lowGainPads = convertAddrsToPads(xcfgData.lowGainAddrs, padmap);
+
+    std::cout << "Number of excluded pads: " << exclPads.size() << std::endl;
+    std::cout << "Number of low gain pads: " << lowGainPads.size() << std::endl;
+
+    // Find the overall excluded pads, including low-gain and trigger-excluded
+    std::set<uint16_t> badPads;
+    std::set_union(exclPads.begin(), exclPads.end(),
+                   lowGainPads.begin(), lowGainPads.end(),
+                   std::inserter(badPads, badPads.begin()));
+
+    std::cout << "Overall number of bad pads: " << badPads.size() << std::endl;
 
     // Create the SQL writer for output, and create the table for output within the database.
     // Then write the parameters to the database.
@@ -88,7 +106,7 @@ int main(const int argc, const char** argv)
             std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);
             std::set<uint16_t> validHits;  // The pads that were hit and not excluded
             std::set_difference(hits.begin(), hits.end(),
-                                exclPads.begin(), exclPads.end(),
+                                badPads.begin(), badPads.end(),
                                 std::inserter(validHits, validHits.begin()));
             results.push_back(std::make_pair<unsigned long, size_t>(i, validHits.size()));
 

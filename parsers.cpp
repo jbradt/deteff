@@ -70,12 +70,12 @@ arma::Mat<uint16_t> readLUT(const std::string& path)
     return res;
 }
 
-std::vector<std::vector<int>> parseXcfg(const std::string& path)
+XcfgParseResult parseXcfg(const std::string& path)
 {
     pugi::xml_document doc;
     doc.load_file(path.c_str());
 
-    std::vector<std::vector<int>> result;
+    XcfgParseResult results;
 
     auto cobos = doc.select_nodes("//Node[@id='CoBo']/Instance[@id!='*']");
 
@@ -90,21 +90,31 @@ std::vector<std::vector<int>> parseXcfg(const std::string& path)
             for (auto& aget : agets) {
                 std::string agetId = aget.node().attribute("id").value();
                 // std::cout << "    " << agetId << std::endl;
+                auto starChannel = aget.node().select_node("channel[@id='*']");
+                std::string defaultGain = starChannel.node().select_node("Gain").node().text().get();
                 auto channels = aget.node().select_nodes("channel[@id!='*']");
                 for (auto& channel : channels) {
                     std::string channelId = channel.node().attribute("id").value();
+                    std::vector<int> addr = {stoi(coboId), stoi(asadId), stoi(agetId), stoi(channelId)};
                     // std::cout << "      " << channelId << std::endl;
                     auto trig = channel.node().select_node("TriggerInhibition");
                     if (trig) {
                         auto text = trig.node().text();
                         if (text && strcmp(text.get(), "inhibit_trigger") == 0) {
-                            std::vector<int> addr = {stoi(coboId), stoi(asadId), stoi(agetId), stoi(channelId)};
-                            result.push_back(addr);
+                            results.exclAddrs.push_back(addr);
+                        }
+                    }
+
+                    auto gain = channel.node().select_node("Gain");
+                    if (gain) {
+                        auto text = gain.node().text();
+                        if (text && strcmp(text.get(), defaultGain.c_str()) != 0) {
+                            results.lowGainAddrs.push_back(addr);
                         }
                     }
                 }
             }
         }
     }
-    return result;
+    return results;
 }
