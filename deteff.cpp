@@ -52,7 +52,7 @@ int main(const int argc, const char** argv)
     distMin.rows(4, 5) *= M_PI / 180;
     arma::vec distMax = config["dist_max"].as<arma::vec>();
     distMax.rows(4, 5) *= M_PI / 180;
-    arma::vec distCtr = (distMax - distMin) / 2;
+    arma::vec distCtr = distMin + (distMax - distMin) / 2;
     arma::vec distSig = (distMax - distMin);
     const unsigned distNumPts = config["dist_num_pts"].as<unsigned>();
     auto params = mcmin.makeParams(distCtr, distSig, distNumPts, distMin, distMax);
