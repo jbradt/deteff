@@ -7,6 +7,7 @@
 #include <armadillo>
 #include <vector>
 #include <utility>
+#include <set>
 
 class DBError : public std::exception
 {
@@ -29,6 +30,9 @@ public:
     void writeParameters(const arma::mat& params);
     void writeResult(const arma::uword idx, const unsigned long numHit);
     void writeResults(const std::vector<std::pair<unsigned long, size_t>>& results);
+
+    void createPadTable();
+    void writeHitPads(const std::vector<std::pair<unsigned long, std::set<uint16_t>>>& hits);
 
 private:
     const std::string path;

@@ -67,6 +67,12 @@ arma::Mat<uint16_t> readLUT(const std::string& path)
     memspace.close();
     ds.close();
     file.close();
+
+    // NOTE: Armadillo stores data in column-major order, while HDF5 uses
+    // row-major ordering. Above, we read the data directly from HDF5 into
+    // the arma matrix, so it was implicitly transposed. The next function
+    // fixes this problem.
+    arma::inplace_trans(res);
     return res;
 }
 

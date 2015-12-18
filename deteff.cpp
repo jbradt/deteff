@@ -95,12 +95,15 @@ int main(const int argc, const char** argv)
     writer.createTable();
     writer.writeParameters(params);
 
+    writer.createPadTable();
+
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
 
     std::vector<std::pair<unsigned long, size_t>> results;
+    std::vector<std::pair<unsigned long, std::set<uint16_t>>> hitPadsList;
 
-    #pragma omp parallel private(results)
+    #pragma omp parallel private(results, hitPadsList)
     {
         #pragma omp for
         for (arma::uword i = 0; i < params.n_rows; i++) {
@@ -112,7 +115,8 @@ int main(const int argc, const char** argv)
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
                                 std::inserter(validHits, validHits.begin()));
-            results.push_back(std::make_pair<unsigned long, size_t>(i, validHits.size()));
+            results.push_back(std::make_pair(i, validHits.size()));
+            hitPadsList.push_back(std::make_pair(i, validHits));
 
             if (results.size() >= 1000) {
                 #pragma omp critical
@@ -121,6 +125,8 @@ int main(const int argc, const char** argv)
                 }
                 writer.writeResults(results);
                 results.clear();
+                writer.writeHitPads(hitPadsList);
+                hitPadsList.clear();
             }
         }
         writer.writeResults(results);
