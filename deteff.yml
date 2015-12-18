@@ -27,3 +27,10 @@ dist_num_pts: 10010
 # Units:  [m, m, m, MeV/u, deg, deg]
 dist_min: [0, 0, 0,     0,   0,  90]
 dist_max: [0, 0, 1,     6, 360, 180]
+
+beam_enu0: 4.17  # (4.6*46 - 20) / 46, MeV/u
+beam_mass: 46
+beam_charge: 18
+
+gas_name: 'isobutane'
+gas_pressure: 18.  # torr

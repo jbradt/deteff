@@ -27,13 +27,55 @@ SQLWriter::~SQLWriter()
     status = sqlite3_close(db);
 }
 
-void SQLWriter::createTable()
+// void SQLWriter::createTable()
+// {
+//     const std::string create_sql =
+//         "CREATE TABLE deteff (i INTEGER UNIQUE, x0 REAL, y0 REAL, z0 REAL, enu0 REAL, azi0 REAL, pol0 REAL, "
+//                              "numHit INTEGER);";
+//     int status = sqlite3_exec(db, create_sql.c_str(), NULL, NULL, NULL);
+//     if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+// }
+
+void SQLWriter::createTable(const std::string& name, const std::vector<SQLColumn>& columns)
 {
-    const std::string create_sql =
-        "CREATE TABLE deteff (i INTEGER UNIQUE, x0 REAL, y0 REAL, z0 REAL, enu0 REAL, azi0 REAL, pol0 REAL, "
-                             "numHit INTEGER);";
-    int status = sqlite3_exec(db, create_sql.c_str(), NULL, NULL, NULL);
+    std::stringstream sqlss;
+    sqlss << "CREATE TABLE " << name << " (idx INTEGER UNIQUE, ";
+    for (int i = 0; i < columns.size(); i++) {
+        sqlss << columns[i].getSQLrepr();
+        if (i < columns.size() - 1) {
+            sqlss << ", ";
+        }
+    }
+    sqlss << ");";
+    std::string sql = sqlss.str();
+
+    int status = sqlite3_exec(db, sql.c_str(), NULL, NULL, NULL);
     if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+}
+
+void SQLWriter::insertIntoTable(const std::string& name, const arma::mat& data)
+{
+    int status = 0;
+    std::stringstream sqlss;
+    sqlss << "INSERT INTO " << name << " VALUES (";
+    for (int i = 0; i < data.n_cols - 1; i++) {
+        sqlss << "?, ";
+    }
+    sqlss << "?);";
+    std::string sql = sqlss.str();
+
+    sqlite3_stmt* stmt = NULL;
+
+    try {
+        status = sqlite3_exec(db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
+
+        status = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, NULL);
+        if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+
+        for (arma::uword i = 0; i < data.n_cols; i++) {
+
+        }
+    }
 }
 
 void SQLWriter::writeParameters(const arma::mat& params)

@@ -7,6 +7,7 @@
 #include <armadillo>
 #include <vector>
 #include <tuple>
+#include <sqlite3.h>
 
 namespace YAML {
     template<>
@@ -26,5 +27,6 @@ public:
 std::vector<double> readEloss(const std::string& path);
 arma::Mat<uint16_t> readLUT(const std::string& path);
 XcfgParseResult parseXcfg(const std::string& path);
+arma::mat readParams(const std::string& path);
 
 #endif /* def PARSERS_H */

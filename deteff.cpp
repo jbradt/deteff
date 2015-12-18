@@ -92,7 +92,9 @@ int main(const int argc, const char** argv)
     // Create the SQL writer for output, and create the table for output within the database.
     // Then write the parameters to the database.
     SQLWriter writer (outPath);
-    writer.createTable();
+    std::vector<SQLColumn> resDescr = {SQLColumn("idx", "INTEGER", "UNIQUE"),
+                                       SQLColumn("hits", "INTEGER")};
+    writer.createTable("results", resDescr);
     writer.writeParameters(params);
 
     writer.createPadTable();

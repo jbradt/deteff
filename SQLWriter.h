@@ -8,6 +8,7 @@
 #include <vector>
 #include <utility>
 #include <set>
+#include <sstream>
 
 class DBError : public std::exception
 {
@@ -19,6 +20,17 @@ private:
     std::string msg;
 };
 
+class SQLColumn
+{
+public:
+    std::string name;
+    std::string type;
+    std::string constraints;
+
+    SQLColumn(const std::string& n, const std::string& t, const std::string& c="") : name(n), type(t), constraints(c) {}
+    std::string getSQLrepr() const { return name + " " + type + " " + constraints; }
+};
+
 class SQLWriter
 {
 public:
@@ -26,7 +38,9 @@ public:
     SQLWriter(const SQLWriter& rhs);
     ~SQLWriter();
 
-    void createTable();
+    void createTable(const std::string& name, const std::vector<SQLColumn>& columns);
+    void insertIntoTable(const std::string& name, const arma::mat& data);
+
     void writeParameters(const arma::mat& params);
     void writeResult(const arma::uword idx, const unsigned long numHit);
     void writeResults(const std::vector<std::pair<unsigned long, size_t>>& results);
