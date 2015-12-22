@@ -13,7 +13,7 @@
 class DBError : public std::exception
 {
 public:
-    DBError(const std::string& m) : msg(m) {}
+    DBError(const std::string& m) { msg = "DBError: " + m; }
     const char* what() const noexcept { return msg.c_str(); }
 
 private:
@@ -40,6 +40,7 @@ public:
 
     void createTable(const std::string& name, const std::vector<SQLColumn>& columns);
     void insertIntoTable(const std::string& name, const arma::mat& data);
+    arma::mat readTable(const std::string& name);
 
     void writeParameters(const arma::mat& params);
     void writeResult(const arma::uword idx, const unsigned long numHit);

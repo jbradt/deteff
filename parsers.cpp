@@ -124,13 +124,3 @@ XcfgParseResult parseXcfg(const std::string& path)
     }
     return results;
 }
-
-arma::mat readParams(const std::string& path)
-{
-    int status = 0;
-    sqlite3 *db = NULL;
-
-    try {
-
-    }
-}
