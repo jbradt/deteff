@@ -1,5 +1,5 @@
 #include "catch.hpp"
-#include "SQLWriter.h"
+#include "SQLiteWrapper.h"
 #include <armadillo>
 #include <vector>
 #include <string>
@@ -7,7 +7,7 @@
 
 TEST_CASE("SQLite3 interface works", "[sqlite3]")
 {
-    SQLWriter writer (":memory:");
+    sqlite::SQLiteDatabase writer (":memory:");
 
     arma::mat data = {{1, 2, 3},
                       {4, 5, 6},
@@ -15,9 +15,9 @@ TEST_CASE("SQLite3 interface works", "[sqlite3]")
                       {10, 11, 12}};
 
     std::string tableName = "test";
-    std::vector<SQLColumn> tableSpec {SQLColumn("a", "REAL"),
-                                      SQLColumn("b", "REAL"),
-                                      SQLColumn("c", "REAL")};
+    std::vector<sqlite::SQLColumn> tableSpec {sqlite::SQLColumn("a", "REAL"),
+                                              sqlite::SQLColumn("b", "REAL"),
+                                              sqlite::SQLColumn("c", "REAL")};
 
     SECTION("Round-trip to database is identity")
     {

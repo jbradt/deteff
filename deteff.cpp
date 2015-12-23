@@ -1,7 +1,7 @@
 #include "../mcopt/mcopt.h"
 #include "PadMap.h"
 #include "parsers.h"
-#include "SQLWriter.h"
+#include "SQLiteWrapper.h"
 #include <armadillo>
 #include <iostream>
 #include <string>
@@ -91,13 +91,18 @@ int main(const int argc, const char** argv)
 
     // Create the SQL writer for output, and create the table for output within the database.
     // Then write the parameters to the database.
-    SQLWriter writer (outPath);
-    std::vector<SQLColumn> resDescr = {SQLColumn("idx", "INTEGER", "UNIQUE"),
-                                       SQLColumn("hits", "INTEGER")};
-    writer.createTable("results", resDescr);
-    writer.writeParameters(params);
+    sqlite::SQLiteDatabase db (outPath);
+    std::vector<sqlite::SQLColumn> hitTableCols =
+        {sqlite::SQLColumn("evt_id", "INTEGER"),
+         sqlite::SQLColumn("hits", "INTEGER")};
+    std::vector<sqlite::SQLColumn> hitPadsTableCols =
+        {sqlite::SQLColumn("evt_id", "INTEGER"),
+         sqlite::SQLColumn("pad", "INTEGER")};
 
-    writer.createPadTable();
+    db.createTable("hit_counts", hitTableCols);
+    db.createTable("hit_pads", hitPadsTableCols);
+
+    
 
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
