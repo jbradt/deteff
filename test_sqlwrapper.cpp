@@ -14,6 +14,11 @@ TEST_CASE("SQLite3 interface works", "[sqlite3]")
                       {7, 8, 9},
                       {10, 11, 12}};
 
+    std::vector<std::vector<double>> dataVec;
+    for (unsigned i = 0; i < data.n_rows; i++) {
+        dataVec.push_back(arma::conv_to<std::vector<double>>::from(data.row(i)));
+    }
+
     std::string tableName = "test";
     std::vector<sqlite::SQLColumn> tableSpec {sqlite::SQLColumn("a", "REAL"),
                                               sqlite::SQLColumn("b", "REAL"),
@@ -22,7 +27,7 @@ TEST_CASE("SQLite3 interface works", "[sqlite3]")
     SECTION("Round-trip to database is identity")
     {
         writer.createTable(tableName, tableSpec);
-        writer.insertIntoTable(tableName, data);
+        writer.insertIntoTable<double>(tableName, dataVec);
 
         arma::mat result = writer.readTable(tableName);
 

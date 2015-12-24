@@ -41,14 +41,18 @@ namespace sqlite {
         ~SQLiteDatabase();
 
         void createTable(const std::string& name, const std::vector<SQLColumn>& columns);
-        void insertIntoTable(const std::string& name, const arma::mat& data);
+        template<typename T>
+        void insertIntoTable(const std::string& name,
+                             const std::vector<std::vector<T>>& data);
         arma::mat readTable(const std::string& name);
 
     private:
         const std::string path;
         sqlite3* db;
     };
-    
+
 }
+
+#include "SQLiteWrapper.tpp"
 
 #endif /* def SQLITEDB_H */
