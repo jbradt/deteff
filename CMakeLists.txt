@@ -15,6 +15,7 @@ set(DETEFF_REQUIRED_LIBRARIES mcopt ${pugixml_LIBRARIES} ${HDF5_CXX_LIBRARIES} $
 
 add_executable(deteff deteff.cpp ${DETEFF_SOURCES})
 target_link_libraries(deteff pugixml ${DETEFF_REQUIRED_LIBRARIES})
+target_compile_features(deteff PUBLIC cxx_return_type_deduction)
 
 add_executable(test_deteff catch_main.cpp test_sqlwrapper.cpp ${DETEFF_SOURCES})
 target_link_libraries(test_deteff pugixml ${DETEFF_REQUIRED_LIBRARIES})

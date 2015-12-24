@@ -22,6 +22,21 @@ std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs
     return pads;
 }
 
+static auto restructureResults(const std::vector<std::pair<unsigned long, std::set<uint16_t>>>& res)
+{
+    std::vector<std::vector<unsigned long>> hitCountsRows;
+    std::vector<std::vector<unsigned long>> hitPadsRows;
+    for (const auto& pair : res) {
+        const auto& evtId = pair.first;
+        const auto& padSet = pair.second;
+        hitCountsRows.push_back({pair.first, padSet.size()});
+        for (const auto& pad : padSet) {
+            hitPadsRows.push_back({evtId, pad});
+        }
+    }
+    return std::make_tuple(hitCountsRows, hitPadsRows);
+}
+
 int main(const int argc, const char** argv)
 {
     if (argc < 3) {
@@ -92,25 +107,27 @@ int main(const int argc, const char** argv)
     // Create the SQL writer for output, and create the table for output within the database.
     // Then write the parameters to the database.
     sqlite::SQLiteDatabase db (outPath);
-    std::vector<sqlite::SQLColumn> hitTableCols =
+
+    std::string hitCountsTableName = "hit_counts";
+    std::vector<sqlite::SQLColumn> hitCountsTableCols =
         {sqlite::SQLColumn("evt_id", "INTEGER"),
          sqlite::SQLColumn("hits", "INTEGER")};
+    db.createTable(hitCountsTableName, hitCountsTableCols);
+
+    std::string hitPadsTableName = "hit_pads";
     std::vector<sqlite::SQLColumn> hitPadsTableCols =
         {sqlite::SQLColumn("evt_id", "INTEGER"),
          sqlite::SQLColumn("pad", "INTEGER")};
-
-    db.createTable("hit_counts", hitTableCols);
-    db.createTable("hit_pads", hitPadsTableCols);
-
-    
+    db.createTable(hitPadsTableName, hitPadsTableCols);
 
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
 
-    std::vector<std::pair<unsigned long, size_t>> results;
-    std::vector<std::pair<unsigned long, std::set<uint16_t>>> hitPadsList;
+    std::vector<std::pair<unsigned long, std::set<uint16_t>>> results;
+    std::vector<std::vector<unsigned long>> hitCountsRows;
+    std::vector<std::vector<unsigned long>> hitPadsRows;
 
-    #pragma omp parallel private(results, hitPadsList)
+    #pragma omp parallel private(results, hitCountsRows, hitPadsRows)
     {
         #pragma omp for
         for (arma::uword i = 0; i < params.n_rows; i++) {
@@ -122,21 +139,25 @@ int main(const int argc, const char** argv)
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
                                 std::inserter(validHits, validHits.begin()));
-            results.push_back(std::make_pair(i, validHits.size()));
-            hitPadsList.push_back(std::make_pair(i, validHits));
+            results.push_back(std::make_pair(i, validHits));
 
             if (results.size() >= 1000) {
                 #pragma omp critical
                 {
                     std::cout << "Results length: " << results.size() << std::endl;
                 }
-                writer.writeResults(results);
+                std::tie(hitCountsRows, hitPadsRows) = restructureResults(results);
+
+                db.insertIntoTable(hitCountsTableName, hitCountsRows);
+                db.insertIntoTable(hitPadsTableName, hitPadsRows);
+
                 results.clear();
-                writer.writeHitPads(hitPadsList);
-                hitPadsList.clear();
             }
         }
-        writer.writeResults(results);
+        std::tie(hitCountsRows, hitPadsRows) = restructureResults(results);
+
+        db.insertIntoTable(hitCountsTableName, hitCountsRows);
+        db.insertIntoTable(hitPadsTableName, hitPadsRows);
         #pragma omp critical
         {
             std::cout << "Results length: " << results.size() << std::endl;

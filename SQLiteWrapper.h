@@ -53,6 +53,4 @@ namespace sqlite {
 
 }
 
-#include "SQLiteWrapper.tpp"
-
 #endif /* def SQLITEDB_H */
