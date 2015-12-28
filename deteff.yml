@@ -16,6 +16,7 @@ vd: [-0.05307544, -0.53536606, -5.14373076]  # in cm/us, in the detector frame
 clock: 12.5
 tilt: 6.0  # in degrees
 pad_rot_angle: -108  # in degrees
+ioniz: 10.56  # http://www.indsci.com/docs/manuals/VX500_IP.pdf, entry "2-methylpropane", page 31
 
 beam_center: [-10, -104.5, 144]  # in mm
 

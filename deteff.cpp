@@ -11,6 +11,12 @@
 #include <tuple>
 #include <unordered_map>
 
+struct setMapCmp
+{
+    bool operator()(int i, const std::pair<int, int>& p) const { return i < p.first; }
+    bool operator()(const std::pair<int, int>& p, int i) const { return p.first < i; }
+};
+
 std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs, const PadMap& padmap)
 {
     std::set<uint16_t> pads;
@@ -41,30 +47,25 @@ std::unordered_map<uint16_t, uint8_t> makeCoBoMap(const PadMap& pm)
     return res;
 }
 
-static auto restructureResults(const std::vector<std::pair<unsigned long, std::set<uint16_t>>>& res,
+static auto restructureResults(const std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>>& res,
                                const std::unordered_map<uint16_t, uint8_t>& cobomap)
 {
-    std::vector<std::vector<unsigned long>> hitCountsRows;
-    std::vector<std::vector<unsigned long>> hitPadsRows;
-    std::vector<std::vector<unsigned long>> coboHitsRows;
+    std::vector<std::vector<unsigned long>> hitsRows;
     for (const auto& pair : res) {
-        // pairs in res are (evt id, set of pad numbers)
+        // pairs in res are (evt id, map of pad->hits)
         const auto& evt_id = pair.first;
-        const auto& hitpads = pair.second;
-        std::vector<unsigned long> coboHits (11, 0);
-        coboHits.at(0) = evt_id;
+        const auto& hitmap = pair.second;
 
-        hitCountsRows.push_back({evt_id, hitpads.size()});
-        for (const auto pad : hitpads) {
-            hitPadsRows.push_back({evt_id, pad});
+        for (const auto& entry : hitmap) {
+            const auto& pad = entry.first;
+            const auto& num_elec = entry.second;
             auto coboMapElement = cobomap.find(pad);
             if (coboMapElement != cobomap.end()) {
-                coboHits.at(coboMapElement->second + 1)++;
+                hitsRows.push_back({evt_id, coboMapElement->second, pad, num_elec});
             }
         }
-        coboHitsRows.push_back(coboHits);
     }
-    return std::make_tuple(hitCountsRows, hitPadsRows, coboHitsRows);
+    return hitsRows;
 }
 
 int main(const int argc, const char** argv)
@@ -85,6 +86,7 @@ int main(const int argc, const char** argv)
     arma::vec bfield = config["bfield"].as<arma::vec>();
     unsigned massNum = config["mass_num"].as<unsigned>();
     unsigned chargeNum = config["charge_num"].as<unsigned>();
+    double ioniz = config["ioniz"].as<double>();
     arma::vec vd = config["vd"].as<arma::vec>();
     double clock = config["clock"].as<double>();
     double tilt = config["tilt"].as<double>() * M_PI / 180;
@@ -131,53 +133,33 @@ int main(const int argc, const char** argv)
     std::cout << "Found params table with " << params.n_rows << " rows" << std::endl;
 
     // Now create tables for output.
-    std::string hitCountsTableName = "hit_counts";
-    std::vector<sqlite::SQLColumn> hitCountsTableCols =
-        {sqlite::SQLColumn("evt_id", "INTEGER"),
-         sqlite::SQLColumn("hits", "INTEGER")};
-    db.createTable(hitCountsTableName, hitCountsTableCols);
 
-    std::string hitPadsTableName = "hit_pads";
-    std::vector<sqlite::SQLColumn> hitPadsTableCols =
+    std::string hitsTableName = "hits";
+    std::vector<sqlite::SQLColumn> hitsTableCols =
         {sqlite::SQLColumn("evt_id", "INTEGER"),
-         sqlite::SQLColumn("pad", "INTEGER")};
-    db.createTable(hitPadsTableName, hitPadsTableCols);
-
-    std::string coboHitsTableName = "cobo_hits";
-    std::vector<sqlite::SQLColumn> coboHitsTableCols =
-        {sqlite::SQLColumn("evt_id", "INTEGER"),
-         sqlite::SQLColumn("cobo0", "INTEGER"),
-         sqlite::SQLColumn("cobo1", "INTEGER"),
-         sqlite::SQLColumn("cobo2", "INTEGER"),
-         sqlite::SQLColumn("cobo3", "INTEGER"),
-         sqlite::SQLColumn("cobo4", "INTEGER"),
-         sqlite::SQLColumn("cobo5", "INTEGER"),
-         sqlite::SQLColumn("cobo6", "INTEGER"),
-         sqlite::SQLColumn("cobo7", "INTEGER"),
-         sqlite::SQLColumn("cobo8", "INTEGER"),
-         sqlite::SQLColumn("cobo9", "INTEGER")};
-    db.createTable(coboHitsTableName, coboHitsTableCols);
+         sqlite::SQLColumn("cobo", "INTEGER"),
+         sqlite::SQLColumn("pad", "INTEGER"),
+         sqlite::SQLColumn("num_elec", "INTEGER")};
+    db.createTable(hitsTableName, hitsTableCols);
 
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
 
-    std::vector<std::pair<unsigned long, std::set<uint16_t>>> results;
-    std::vector<std::vector<unsigned long>> hitCountsRows;
-    std::vector<std::vector<unsigned long>> hitPadsRows;
-    std::vector<std::vector<unsigned long>> coboHitsRows;
+    std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>> results;
+    std::vector<std::vector<unsigned long>> hitsRows;
 
-    #pragma omp parallel private(results, hitCountsRows, hitPadsRows, coboHitsRows)
+    #pragma omp parallel private(results, hitsRows)
     {
         #pragma omp for
         for (arma::uword i = 0; i < params.n_rows; i++) {
             auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                           params(i, 5));
             tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
-            std::set<uint16_t> hits = findHitPads(pads, tr, vd, clock);  // Includes uncalibration
-            std::set<uint16_t> validHits;  // The pads that were hit and not excluded or low-gain
+            auto hits = findHitPads(pads, tr, vd, clock, massNum, ioniz);  // Includes uncalibration
+            decltype(hits) validHits;  // The pads that were hit and not excluded or low-gain
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
-                                std::inserter(validHits, validHits.begin()));
+                                std::inserter(validHits, validHits.begin()), setMapCmp());
             results.push_back(std::make_pair(i, validHits));
 
             if (results.size() >= 1000) {
@@ -185,21 +167,15 @@ int main(const int argc, const char** argv)
                 {
                     std::cout << "Results length: " << results.size() << std::endl;
                 }
-                std::tie(hitCountsRows, hitPadsRows, coboHitsRows) = restructureResults(results, cobomap);
-                assert(hitCountsRows.size() == results.size());
+                hitsRows = restructureResults(results, cobomap);
 
-                db.insertIntoTable(hitCountsTableName, hitCountsRows);
-                db.insertIntoTable(hitPadsTableName, hitPadsRows);
-                db.insertIntoTable(coboHitsTableName, coboHitsRows);
-
+                db.insertIntoTable(hitsTableName, hitsRows);
                 results.clear();
             }
         }
-        std::tie(hitCountsRows, hitPadsRows, coboHitsRows) = restructureResults(results, cobomap);
+        hitsRows = restructureResults(results, cobomap);
 
-        db.insertIntoTable(hitCountsTableName, hitCountsRows);
-        db.insertIntoTable(hitPadsTableName, hitPadsRows);
-        db.insertIntoTable(coboHitsTableName, coboHitsRows);
+        db.insertIntoTable(hitsTableName, hitsRows);
         #pragma omp critical
         {
             std::cout << "Results length: " << results.size() << std::endl;
