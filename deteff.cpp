@@ -27,11 +27,9 @@ static auto restructureResults(const std::vector<std::pair<unsigned long, std::s
     std::vector<std::vector<unsigned long>> hitCountsRows;
     std::vector<std::vector<unsigned long>> hitPadsRows;
     for (const auto& pair : res) {
-        const auto& evtId = pair.first;
-        const auto& padSet = pair.second;
-        hitCountsRows.push_back({pair.first, padSet.size()});
-        for (const auto& pad : padSet) {
-            hitPadsRows.push_back({evtId, pad});
+        hitCountsRows.push_back({pair.first, pair.second.size()});
+        for (const auto pad : pair.second) {
+            hitPadsRows.push_back({pair.first, pad});
         }
     }
     return std::make_tuple(hitCountsRows, hitPadsRows);
@@ -77,16 +75,6 @@ int main(const int argc, const char** argv)
     // Instantiate a minimizer so we can track particles.
     MCminimizer mcmin(massNum, chargeNum, eloss, efield, bfield);
 
-    // Get the distribution parameters from the config file and create the parameters set
-    arma::vec distMin = config["dist_min"].as<arma::vec>();
-    distMin.rows(4, 5) *= M_PI / 180;
-    arma::vec distMax = config["dist_max"].as<arma::vec>();
-    distMax.rows(4, 5) *= M_PI / 180;
-    arma::vec distCtr = distMin + (distMax - distMin) / 2;
-    arma::vec distSig = (distMax - distMin);
-    const unsigned distNumPts = config["dist_num_pts"].as<unsigned>();
-    auto params = mcmin.makeParams(distCtr, distSig, distNumPts, distMin, distMax);
-
     // Parse the GET config file. This gives us the set of pads excluded from the trigger.
     std::string xcfgPath = config["xcfg_path"].as<std::string>();
     XcfgParseResult xcfgData = parseXcfg(xcfgPath);
@@ -104,10 +92,12 @@ int main(const int argc, const char** argv)
 
     std::cout << "Overall number of bad pads: " << badPads.size() << std::endl;
 
-    // Create the SQL writer for output, and create the table for output within the database.
-    // Then write the parameters to the database.
+    // Open the SQLite database and read the parameters table
     sqlite::SQLiteDatabase db (outPath);
+    arma::mat params = db.readTable("params");
+    std::cout << "Found params table with " << params.n_rows << " rows" << std::endl;
 
+    // Now create tables for output.
     std::string hitCountsTableName = "hit_counts";
     std::vector<sqlite::SQLColumn> hitCountsTableCols =
         {sqlite::SQLColumn("evt_id", "INTEGER"),
@@ -147,6 +137,7 @@ int main(const int argc, const char** argv)
                     std::cout << "Results length: " << results.size() << std::endl;
                 }
                 std::tie(hitCountsRows, hitPadsRows) = restructureResults(results);
+                assert(hitCountsRows.size() == results.size());
 
                 db.insertIntoTable(hitCountsTableName, hitCountsRows);
                 db.insertIntoTable(hitPadsTableName, hitPadsRows);

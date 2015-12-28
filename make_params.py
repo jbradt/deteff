@@ -64,7 +64,7 @@ def main():
                          num_evts=config['dist_num_pts'])
 
     with sqlite3.connect(args.output_path) as conn:
-        params.to_sql('params', conn)
+        params.to_sql('params', conn, index=False)
 
 
 if __name__ == '__main__':
