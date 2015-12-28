@@ -9,6 +9,7 @@
 #include <set>
 #include <algorithm>
 #include <tuple>
+#include <unordered_map>
 
 std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs, const PadMap& padmap)
 {
@@ -22,17 +23,48 @@ std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs
     return pads;
 }
 
-static auto restructureResults(const std::vector<std::pair<unsigned long, std::set<uint16_t>>>& res)
+std::unordered_map<uint16_t, uint8_t> makeCoBoMap(const PadMap& pm)
+{
+    std::unordered_map<uint16_t, uint8_t> res;
+    for (uint8_t cobo = 0; cobo < 10; cobo++) {
+        for (uint8_t asad = 0; asad < 4; asad++) {
+            for (uint8_t aget = 0; aget < 4; aget++) {
+                for (uint16_t channel = 0; channel < 68; channel++) {
+                    uint16_t pad = pm.find(cobo, asad, aget, channel);
+                    if (pad != pm.missingValue) {
+                        res.emplace(pad, cobo);
+                    }
+                }
+            }
+        }
+    }
+    return res;
+}
+
+static auto restructureResults(const std::vector<std::pair<unsigned long, std::set<uint16_t>>>& res,
+                               const std::unordered_map<uint16_t, uint8_t>& cobomap)
 {
     std::vector<std::vector<unsigned long>> hitCountsRows;
     std::vector<std::vector<unsigned long>> hitPadsRows;
+    std::vector<std::vector<unsigned long>> coboHitsRows;
     for (const auto& pair : res) {
-        hitCountsRows.push_back({pair.first, pair.second.size()});
-        for (const auto pad : pair.second) {
-            hitPadsRows.push_back({pair.first, pad});
+        // pairs in res are (evt id, set of pad numbers)
+        const auto& evt_id = pair.first;
+        const auto& hitpads = pair.second;
+        std::vector<unsigned long> coboHits (11, 0);
+        coboHits.at(0) = evt_id;
+
+        hitCountsRows.push_back({evt_id, hitpads.size()});
+        for (const auto pad : hitpads) {
+            hitPadsRows.push_back({evt_id, pad});
+            auto coboMapElement = cobomap.find(pad);
+            if (coboMapElement != cobomap.end()) {
+                coboHits.at(coboMapElement->second + 1)++;
+            }
         }
+        coboHitsRows.push_back(coboHits);
     }
-    return std::make_tuple(hitCountsRows, hitPadsRows);
+    return std::make_tuple(hitCountsRows, hitPadsRows, coboHitsRows);
 }
 
 int main(const int argc, const char** argv)
@@ -71,6 +103,7 @@ int main(const int argc, const char** argv)
     PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001, padRotAngle);
     std::string padmapPath = config["padmap_path"].as<std::string>();
     PadMap padmap (padmapPath);
+    auto cobomap = makeCoBoMap(padmap);
 
     // Instantiate a minimizer so we can track particles.
     MCminimizer mcmin(massNum, chargeNum, eloss, efield, bfield);
@@ -110,14 +143,30 @@ int main(const int argc, const char** argv)
          sqlite::SQLColumn("pad", "INTEGER")};
     db.createTable(hitPadsTableName, hitPadsTableCols);
 
+    std::string coboHitsTableName = "cobo_hits";
+    std::vector<sqlite::SQLColumn> coboHitsTableCols =
+        {sqlite::SQLColumn("evt_id", "INTEGER"),
+         sqlite::SQLColumn("cobo0", "INTEGER"),
+         sqlite::SQLColumn("cobo1", "INTEGER"),
+         sqlite::SQLColumn("cobo2", "INTEGER"),
+         sqlite::SQLColumn("cobo3", "INTEGER"),
+         sqlite::SQLColumn("cobo4", "INTEGER"),
+         sqlite::SQLColumn("cobo5", "INTEGER"),
+         sqlite::SQLColumn("cobo6", "INTEGER"),
+         sqlite::SQLColumn("cobo7", "INTEGER"),
+         sqlite::SQLColumn("cobo8", "INTEGER"),
+         sqlite::SQLColumn("cobo9", "INTEGER")};
+    db.createTable(coboHitsTableName, coboHitsTableCols);
+
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
 
     std::vector<std::pair<unsigned long, std::set<uint16_t>>> results;
     std::vector<std::vector<unsigned long>> hitCountsRows;
     std::vector<std::vector<unsigned long>> hitPadsRows;
+    std::vector<std::vector<unsigned long>> coboHitsRows;
 
-    #pragma omp parallel private(results, hitCountsRows, hitPadsRows)
+    #pragma omp parallel private(results, hitCountsRows, hitPadsRows, coboHitsRows)
     {
         #pragma omp for
         for (arma::uword i = 0; i < params.n_rows; i++) {
@@ -136,19 +185,21 @@ int main(const int argc, const char** argv)
                 {
                     std::cout << "Results length: " << results.size() << std::endl;
                 }
-                std::tie(hitCountsRows, hitPadsRows) = restructureResults(results);
+                std::tie(hitCountsRows, hitPadsRows, coboHitsRows) = restructureResults(results, cobomap);
                 assert(hitCountsRows.size() == results.size());
 
                 db.insertIntoTable(hitCountsTableName, hitCountsRows);
                 db.insertIntoTable(hitPadsTableName, hitPadsRows);
+                db.insertIntoTable(coboHitsTableName, coboHitsRows);
 
                 results.clear();
             }
         }
-        std::tie(hitCountsRows, hitPadsRows) = restructureResults(results);
+        std::tie(hitCountsRows, hitPadsRows, coboHitsRows) = restructureResults(results, cobomap);
 
         db.insertIntoTable(hitCountsTableName, hitCountsRows);
         db.insertIntoTable(hitPadsTableName, hitPadsRows);
+        db.insertIntoTable(coboHitsTableName, coboHitsRows);
         #pragma omp critical
         {
             std::cout << "Results length: " << results.size() << std::endl;
