@@ -26,9 +26,9 @@ def find_proton_energy(th3, m1, m2, m3, m4, T):
 def find_vertex_energy(beam_intercept, beam_enu0, beam_mass, beam_chg, gas):
     ei = beam_enu0 * beam_mass
     ri = gas.range(ei, beam_mass, beam_chg)  # this is in meters
-    rf = ri - (1000 - beam_intercept) / 1000
+    rf = ri - (1.0 - beam_intercept)
     ef = gas.inverse_range(rf, beam_mass, beam_chg)
-    return ef / beam_mass
+    return ef
 
 
 def make_params(beam_enu0, beam_mass, beam_chg, proj_mass, proj_chg, gas, num_evts):
