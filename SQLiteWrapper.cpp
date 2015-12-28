@@ -63,7 +63,7 @@ namespace sqlite {
         int status = 0;
 
         size_t numRows = data.size();
-        if (numRows == 0) throw DBError("Input vector was empty");
+        if (numRows == 0) return; //throw DBError("Input vector was empty");
         size_t numCols = data.at(0).size();
 
         std::stringstream sqlss;
