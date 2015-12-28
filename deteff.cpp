@@ -163,22 +163,21 @@ int main(const int argc, const char** argv)
             results.push_back(std::make_pair(i, validHits));
 
             if (results.size() >= 1000) {
+                hitsRows = restructureResults(results, cobomap);
                 #pragma omp critical
                 {
                     std::cout << "Results length: " << results.size() << std::endl;
+                    db.insertIntoTable(hitsTableName, hitsRows);
                 }
-                hitsRows = restructureResults(results, cobomap);
-
-                db.insertIntoTable(hitsTableName, hitsRows);
                 results.clear();
             }
         }
         hitsRows = restructureResults(results, cobomap);
 
-        db.insertIntoTable(hitsTableName, hitsRows);
         #pragma omp critical
         {
             std::cout << "Results length: " << results.size() << std::endl;
+            db.insertIntoTable(hitsTableName, hitsRows);
         }
     }
 
