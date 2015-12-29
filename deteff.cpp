@@ -10,7 +10,10 @@
 #include <algorithm>
 #include <tuple>
 #include <unordered_map>
-#include <omp.h>
+
+#ifdef _OPENMP
+    #include <omp.h>
+#endif /* def _OPENMP */
 
 struct setMapCmp
 {
@@ -146,12 +149,17 @@ int main(const int argc, const char** argv)
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
 
-    std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>> results;
-    std::vector<std::vector<unsigned long>> hitsRows;
 
-    #pragma omp parallel private(results, hitsRows)
+    #pragma omp parallel
     {
-        int threadNum = omp_get_thread_num();
+        #ifdef _OPENMP
+            int threadNum = omp_get_thread_num();
+        #else
+            int threadNum = 0;
+        #endif /* def _OPENMP */
+        
+        std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>> results;
+        std::vector<std::vector<unsigned long>> hitsRows;
 
         #pragma omp for schedule(runtime)
         for (arma::uword i = 0; i < params.n_rows; i++) {
