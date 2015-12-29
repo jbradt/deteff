@@ -4,6 +4,9 @@ include_directories(SYSTEM ${HDF5_INCLUDE_DIRS})
 find_package(YamlCpp REQUIRED)
 include_directories(SYSTEM ${YAMLCPP_INCLUDE_DIR})
 
+find_package(Boost REQUIRED)
+include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+
 find_package(SQLite3 REQUIRED)
 include_directories(SYSTEM ${SQLITE3_INCLUDE_DIRS})
 
