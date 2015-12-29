@@ -52,6 +52,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='A script to make parameters for deteff')
     parser.add_argument('config_path', help='Path to config file')
+    parser.add_argument('eloss_path', help='Path to write energy loss info to')
     parser.add_argument('output_path', help='Path to output file')
     args = parser.parse_args()
 
@@ -61,7 +62,7 @@ def main():
     gas = pytpc.gases.InterpolatedGas(config['gas_name'], config['gas_pressure'])
     ens = np.arange(0, 100e3, dtype='int')
     eloss = gas.energy_loss(ens / 1000, config['mass_num'], config['charge_num'])
-    with h5py.File(config['eloss_path'], 'a') as h5file:
+    with h5py.File(args.eloss_path, 'a') as h5file:
         if 'eloss' in h5file:
             del h5file['eloss']
         h5file.create_dataset('eloss', data=eloss)

@@ -71,13 +71,14 @@ static auto restructureResults(const std::vector<std::pair<unsigned long, std::m
 
 int main(const int argc, const char** argv)
 {
-    if (argc < 3) {
-        std::cerr << "Need path to config file and output file." << std::endl;
+    if (argc < 4) {
+        std::cerr << "Usage: deteff CONFIG_PATH ELOSS_PATH OUTPUT_PATH" << std::endl;
         return 1;
     }
 
     const std::string configPath = argv[1];
-    const std::string outPath = argv[2];
+    const std::string elossPath = argv[2];
+    const std::string outPath = argv[3];
 
     // Parse config file
     YAML::Node config = YAML::LoadFile(configPath);
@@ -94,7 +95,6 @@ int main(const int argc, const char** argv)
     arma::vec beamCtr = config["beam_center"].as<arma::vec>() / 1000;  // Need to convert to meters
 
     // Read the energy loss data from the given path
-    std::string elossPath = config["eloss_path"].as<std::string>();
     std::vector<double> eloss = readEloss(elossPath);
 
     // Read the pad mapping information. This includes the padmap, which maps

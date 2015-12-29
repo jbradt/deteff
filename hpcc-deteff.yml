@@ -1,7 +1,6 @@
 ---
 # Paths to required files
 
-eloss_path: /mnt/home/jbradt/Documents/Code/ar40-aug15/monte_carlo/eloss.h5
 lut_path: /mnt/home/jbradt/Documents/Code/ar40-aug15/monte_carlo/LUT.h5
 xcfg_path: /mnt/home/jbradt/Documents/Data/Meta/e15503b/configs/run_0197/configure-e15503b.xcfg
 padmap_path: /mnt/home/jbradt/Documents/Data/e15503b/Lookup20150611.csv
