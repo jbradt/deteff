@@ -22,7 +22,7 @@ beam_center: [-10, -104.5, 144]  # in mm
 
 # Distribution parameters
 
-dist_num_pts: 10010
+dist_num_pts: 50000
 
 # Values: [x, y, z,   enu, azi, pol]
 # Units:  [m, m, m, MeV/u, deg, deg]

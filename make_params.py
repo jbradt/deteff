@@ -48,6 +48,7 @@ def main():
     import yaml
     import argparse
     import sqlite3
+    import h5py
 
     parser = argparse.ArgumentParser(description='A script to make parameters for deteff')
     parser.add_argument('config_path', help='Path to config file')
@@ -58,6 +59,12 @@ def main():
         config = yaml.load(f)
 
     gas = pytpc.gases.InterpolatedGas(config['gas_name'], config['gas_pressure'])
+    ens = np.arange(0, 100e3, dtype='int')
+    eloss = gas.energy_loss(ens / 1000, config['mass_num'], config['charge_num'])
+    with h5py.File(config['eloss_path'], 'a') as h5file:
+        if 'eloss' in h5file:
+            del h5file['eloss']
+        h5file.create_dataset('eloss', data=eloss)
 
     params = make_params(beam_enu0=config['beam_enu0'], beam_mass=config['beam_mass'], beam_chg=config['beam_charge'],
                          proj_mass=config['mass_num'], proj_chg=config['charge_num'], gas=gas,

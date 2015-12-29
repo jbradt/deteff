@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <tuple>
 #include <unordered_map>
+#include <omp.h>
 
 struct setMapCmp
 {
@@ -150,7 +151,9 @@ int main(const int argc, const char** argv)
 
     #pragma omp parallel private(results, hitsRows)
     {
-        #pragma omp for
+        int threadNum = omp_get_thread_num();
+
+        #pragma omp for schedule(runtime)
         for (arma::uword i = 0; i < params.n_rows; i++) {
             auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                           params(i, 5));
@@ -162,12 +165,12 @@ int main(const int argc, const char** argv)
                                 std::inserter(validHits, validHits.begin()), setMapCmp());
             results.push_back(std::make_pair(i, validHits));
 
-            if (results.size() >= 1000) {
+            if (results.size() >= 1000 + threadNum*100) {
                 hitsRows = restructureResults(results, cobomap);
                 #pragma omp critical
                 {
-                    std::cout << "Results length: " << results.size() << std::endl;
                     db.insertIntoTable(hitsTableName, hitsRows);
+                    std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
                 }
                 results.clear();
             }
@@ -176,8 +179,8 @@ int main(const int argc, const char** argv)
 
         #pragma omp critical
         {
-            std::cout << "Results length: " << results.size() << std::endl;
             db.insertIntoTable(hitsTableName, hitsRows);
+            std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
         }
     }
 
