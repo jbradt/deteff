@@ -106,13 +106,13 @@ int main(const int argc, const char** argv)
     std::string lutPath = config["lut_path"].as<std::string>();
     double padRotAngle = config["pad_rot_angle"].as<double>() * M_PI / 180;
     arma::Mat<uint16_t> lut = readLUT(lutPath);
-    PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001, padRotAngle);
+    mcopt::PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001, padRotAngle);
     std::string padmapPath = config["padmap_path"].as<std::string>();
     PadMap padmap (padmapPath);
     auto cobomap = makeCoBoMap(padmap);
 
     // Instantiate a minimizer so we can track particles.
-    MCminimizer mcmin(massNum, chargeNum, eloss, efield, bfield);
+    mcopt::Tracker tracker(massNum, chargeNum, eloss, efield, bfield);
 
     // Parse the GET config file. This gives us the set of pads excluded from the trigger.
     std::string xcfgPath = config["xcfg_path"].as<std::string>();
@@ -157,16 +157,16 @@ int main(const int argc, const char** argv)
         #else
             int threadNum = 0;
         #endif /* def _OPENMP */
-        
+
         std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>> results;
         std::vector<std::vector<unsigned long>> hitsRows;
 
         #pragma omp for schedule(runtime)
         for (arma::uword i = 0; i < params.n_rows; i++) {
-            auto tr = mcmin.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
+            auto tr = tracker.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                           params(i, 5));
             tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
-            auto hits = findHitPads(pads, tr, vd, clock, massNum, ioniz);  // Includes uncalibration
+            auto hits = mcopt::makePeaksFromSimulation(pads, tr, vd, clock, massNum, ioniz);  // Includes uncalibration
             decltype(hits) validHits;  // The pads that were hit and not excluded or low-gain
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
