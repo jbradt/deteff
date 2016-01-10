@@ -1,5 +1,4 @@
 #include "../mcopt/mcopt.h"
-#include "PadMap.h"
 #include "parsers.h"
 #include "SQLiteWrapper.h"
 #include <armadillo>
@@ -17,11 +16,11 @@
 
 struct setMapCmp
 {
-    bool operator()(int i, const std::pair<int, int>& p) const { return i < p.first; }
-    bool operator()(const std::pair<int, int>& p, int i) const { return p.first < i; }
+    bool operator()(int i, const std::pair<mcopt::pad_t, mcopt::Peak>& p) const { return i < p.first; }
+    bool operator()(const std::pair<mcopt::pad_t, mcopt::Peak>& p, int i) const { return p.first < i; }
 };
 
-std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs, const PadMap& padmap)
+std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs, const mcopt::PadMap& padmap)
 {
     std::set<uint16_t> pads;
     for (const auto& addr : addrs) {
@@ -33,26 +32,8 @@ std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs
     return pads;
 }
 
-std::unordered_map<uint16_t, uint8_t> makeCoBoMap(const PadMap& pm)
-{
-    std::unordered_map<uint16_t, uint8_t> res;
-    for (uint8_t cobo = 0; cobo < 10; cobo++) {
-        for (uint8_t asad = 0; asad < 4; asad++) {
-            for (uint8_t aget = 0; aget < 4; aget++) {
-                for (uint16_t channel = 0; channel < 68; channel++) {
-                    uint16_t pad = pm.find(cobo, asad, aget, channel);
-                    if (pad != pm.missingValue) {
-                        res.emplace(pad, cobo);
-                    }
-                }
-            }
-        }
-    }
-    return res;
-}
-
-static auto restructureResults(const std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>>& res,
-                               const std::unordered_map<uint16_t, uint8_t>& cobomap)
+static auto restructureResults(const std::vector<std::pair<unsigned long, std::map<uint16_t, mcopt::Peak>>>& res,
+                               const mcopt::PadMap& padmap)
 {
     std::vector<std::vector<unsigned long>> hitsRows;
     for (const auto& pair : res) {
@@ -62,10 +43,10 @@ static auto restructureResults(const std::vector<std::pair<unsigned long, std::m
 
         for (const auto& entry : hitmap) {
             const auto& pad = entry.first;
-            const auto& num_elec = entry.second;
-            auto coboMapElement = cobomap.find(pad);
-            if (coboMapElement != cobomap.end()) {
-                hitsRows.push_back({evt_id, coboMapElement->second, pad, num_elec});
+            const auto& num_elec = entry.second.amplitude;
+            unsigned cobo = padmap.reverseFind(pad).cobo;
+            if (cobo != padmap.missingValue) {
+                hitsRows.push_back({evt_id, cobo, pad, num_elec});
             }
         }
     }
@@ -108,10 +89,20 @@ int main(const int argc, const char** argv)
     arma::Mat<uint16_t> lut = readLUT(lutPath);
     mcopt::PadPlane pads (lut, -0.280, 0.0001, -0.280, 0.0001, padRotAngle);
     std::string padmapPath = config["padmap_path"].as<std::string>();
-    PadMap padmap (padmapPath);
-    auto cobomap = makeCoBoMap(padmap);
+    mcopt::PadMap padmap (padmapPath);
 
-    // Instantiate a minimizer so we can track particles.
+    // Prepare the trigger object
+    unsigned padThreshMSB = config["pad_thresh_MSB"].as<unsigned>();
+    unsigned padThreshLSB = config["pad_thresh_LSB"].as<unsigned>();
+    double trigWidth = config["trigger_signal_width"].as<double>();
+    unsigned long multThresh = config["multiplicity_threshold"].as<unsigned long>();
+    unsigned long multWindow = config["multiplicity_window"].as<unsigned long>();
+    double gain = config["gain"].as<double>();
+    double discrFrac = config["trigger_discriminator_fraction"].as<double>();
+    mcopt::Trigger trigger (padThreshMSB, padThreshLSB, trigWidth, multThresh, multWindow, clock * 1e6,
+                            gain, discrFrac, padmap);
+
+    // Instantiate a tracker so we can track particles.
     mcopt::Tracker tracker(massNum, chargeNum, eloss, efield, bfield);
 
     // Parse the GET config file. This gives us the set of pads excluded from the trigger.
@@ -146,9 +137,14 @@ int main(const int argc, const char** argv)
          sqlite::SQLColumn("num_elec", "INTEGER")};
     db.createTable(hitsTableName, hitsTableCols);
 
+    std::string trigTableName = "trig";
+    std::vector<sqlite::SQLColumn> trigTableCols =
+        {sqlite::SQLColumn("evt_id", "INTEGER PRIMARY KEY"),
+         sqlite::SQLColumn("trig", "INTEGER")};
+    db.createTable(trigTableName, trigTableCols);
+
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
-
 
     #pragma omp parallel
     {
@@ -158,36 +154,44 @@ int main(const int argc, const char** argv)
             int threadNum = 0;
         #endif /* def _OPENMP */
 
-        std::vector<std::pair<unsigned long, std::map<uint16_t, unsigned long>>> results;
+        std::vector<std::pair<unsigned long, std::map<uint16_t, mcopt::Peak>>> results;
+        std::vector<std::vector<unsigned long>> trigRows;
         std::vector<std::vector<unsigned long>> hitsRows;
 
         #pragma omp for schedule(runtime)
         for (arma::uword i = 0; i < params.n_rows; i++) {
             auto tr = tracker.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
-                                          params(i, 5));
+                                            params(i, 5));
             tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
             auto hits = mcopt::makePeaksFromSimulation(pads, tr, vd, clock, massNum, ioniz);  // Includes uncalibration
             decltype(hits) validHits;  // The pads that were hit and not excluded or low-gain
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
                                 std::inserter(validHits, validHits.begin()), setMapCmp());
+
+            bool trigRes = trigger.didTrigger(validHits);
+            trigRows.push_back({i, trigRes});
+
             results.push_back(std::make_pair(i, validHits));
 
             if (results.size() >= 1000 + threadNum*100) {
-                hitsRows = restructureResults(results, cobomap);
+                hitsRows = restructureResults(results, padmap);
                 #pragma omp critical
                 {
                     db.insertIntoTable(hitsTableName, hitsRows);
+                    db.insertIntoTable(trigTableName, trigRows);
                     std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
                 }
                 results.clear();
+                trigRows.clear();
             }
         }
-        hitsRows = restructureResults(results, cobomap);
+        hitsRows = restructureResults(results, padmap);
 
         #pragma omp critical
         {
             db.insertIntoTable(hitsTableName, hitsRows);
+            db.insertIntoTable(trigTableName, trigRows);
             std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
         }
     }

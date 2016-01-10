@@ -82,7 +82,6 @@ XcfgParseResult parseXcfg(const std::string& path)
     doc.load_file(path.c_str());
 
     XcfgParseResult results;
-
     auto cobos = doc.select_nodes("//Node[@id='CoBo']/Instance[@id!='*']");
 
     for (auto& cobo : cobos) {
