@@ -141,6 +141,7 @@ int main(const int argc, const char** argv)
          sqlite::SQLColumn("tb", "INTEGER"),
          sqlite::SQLColumn("num_elec", "INTEGER")};
     db.createTable(hitsTableName, hitsTableCols);
+    db.createIndex(hitsTableName, "evt_id");
 
     std::string trigTableName = "trig";
     std::vector<sqlite::SQLColumn> trigTableCols =

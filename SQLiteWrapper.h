@@ -45,6 +45,7 @@ namespace sqlite {
         void insertIntoTable(const std::string& name,
                              const std::vector<std::vector<T>>& data);
         arma::mat readTable(const std::string& name);
+        void createIndex(const std::string& tableName, const std::string& columnName);
 
     private:
         const std::string path;

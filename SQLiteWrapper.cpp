@@ -166,4 +166,11 @@ namespace sqlite {
         return res;
     }
 
+    void SQLiteDatabase::createIndex(const std::string& tableName, const std::string& columnName)
+    {
+        std::string sql = "CREATE INDEX " + columnName + " on " + tableName + " (" + columnName + ");";
+        int status = sqlite3_exec(db, sql.c_str(), NULL, NULL, NULL);
+        if (status != SQLITE_OK) throw DBError(sqlite3_errmsg(db));
+    }
+
 }
