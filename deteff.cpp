@@ -43,10 +43,10 @@ static auto restructureResults(const std::vector<std::pair<unsigned long, std::m
 
         for (const auto& entry : hitmap) {
             const auto& pad = entry.first;
-            const auto& num_elec = entry.second.amplitude;
+            const auto& peak = entry.second;
             unsigned cobo = padmap.reverseFind(pad).cobo;
             if (cobo != padmap.missingValue) {
-                hitsRows.push_back({evt_id, cobo, pad, num_elec});
+                hitsRows.push_back({evt_id, cobo, pad, peak.timeBucket, peak.amplitude});
             }
         }
     }
@@ -99,8 +99,12 @@ int main(const int argc, const char** argv)
     unsigned long multWindow = config["multiplicity_window"].as<unsigned long>();
     double gain = config["gain"].as<double>();
     double discrFrac = config["trigger_discriminator_fraction"].as<double>();
+    unsigned umegasGain = config["micromegas_gain"].as<unsigned>();
     mcopt::Trigger trigger (padThreshMSB, padThreshLSB, trigWidth, multThresh, multWindow, clock * 1e6,
                             gain, discrFrac, padmap);
+
+    std::cout << "Trigger threshold: " << trigger.getPadThresh() << " electrons" << std::endl;
+    std::cout << "Multiplicity window: " << trigger.getMultWindow() << " time buckets" << std::endl;
 
     // Instantiate a tracker so we can track particles.
     mcopt::Tracker tracker(massNum, chargeNum, eloss, efield, bfield);
@@ -134,6 +138,7 @@ int main(const int argc, const char** argv)
         {sqlite::SQLColumn("evt_id", "INTEGER"),
          sqlite::SQLColumn("cobo", "INTEGER"),
          sqlite::SQLColumn("pad", "INTEGER"),
+         sqlite::SQLColumn("tb", "INTEGER"),
          sqlite::SQLColumn("num_elec", "INTEGER")};
     db.createTable(hitsTableName, hitsTableCols);
 
@@ -163,7 +168,7 @@ int main(const int argc, const char** argv)
             auto tr = tracker.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                             params(i, 5));
             tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
-            auto hits = mcopt::makePeaksFromSimulation(pads, tr, vd, clock, massNum, ioniz);  // Includes uncalibration
+            auto hits = mcopt::makePeaksFromSimulation(pads, tr, vd, clock, massNum, ioniz, umegasGain);  // Includes uncalibration
             decltype(hits) validHits;  // The pads that were hit and not excluded or low-gain
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
