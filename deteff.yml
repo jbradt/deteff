@@ -32,7 +32,7 @@ gas_pressure: 18.  # torr
 
 pad_thresh_MSB: 1  # "GlobalThresholdValue"
 pad_thresh_LSB: 2  # "LSBThresholdValue"
-trigger_signal_width: 200e-5  # in seconds. Controlled by "isTOTActive" and "isTriggerWidth200ns" in Reg1
+trigger_signal_width: 200e-8  # in seconds. Controlled by "isTOTActive" and "isTriggerWidth200ns" in Reg1
 multiplicity_threshold: 20000
 multiplicity_window: 300  # number of periods of global 100 MHz clock. "multWindowSize"
 gain: 120e-15  # in coulombs
