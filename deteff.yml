@@ -12,7 +12,7 @@ bfield: [0, 0, 1.755424]  # in Tesla, in the uvw/lab frame
 mass_num: 1
 charge_num: 1
 vd: [-0.05307544, -0.53536606, -5.14373076]  # in cm/us, in the detector frame
-clock: 12.5
+clock: 12.5e6  # in Hz
 tilt: 6.0  # in degrees
 pad_rot_angle: -108  # in degrees
 ioniz: 10.56  # http://www.indsci.com/docs/manuals/VX500_IP.pdf, entry "2-methylpropane", page 31
@@ -36,5 +36,6 @@ trigger_signal_width: 800e-9  # in seconds. Controlled by "isTOTActive" and "isT
 multiplicity_threshold: 20000
 multiplicity_window: 300  # number of periods of global 100 MHz clock. "multWindowSize"
 gain: 120e-15  # in coulombs
+shape: 280e-9  # in seconds
 trigger_discriminator_fraction: 0.175  # as a decimal, not a percent
 micromegas_gain: 1000

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <tuple>
 #include <unordered_map>
+#include <chrono>
 
 #ifdef _OPENMP
     #include <omp.h>
@@ -75,6 +76,7 @@ int main(const int argc, const char** argv)
     double ioniz = config["ioniz"].as<double>();
     arma::vec vd = config["vd"].as<arma::vec>();
     double clock = config["clock"].as<double>();
+    double shape = config["shape"].as<double>();
     double tilt = config["tilt"].as<double>() * M_PI / 180;
     arma::vec beamCtr = config["beam_center"].as<arma::vec>() / 1000;  // Need to convert to meters
 
@@ -100,7 +102,7 @@ int main(const int argc, const char** argv)
     double gain = config["gain"].as<double>();
     double discrFrac = config["trigger_discriminator_fraction"].as<double>();
     unsigned umegasGain = config["micromegas_gain"].as<unsigned>();
-    mcopt::Trigger trigger (padThreshMSB, padThreshLSB, trigWidth, multThresh, multWindow, clock * 1e6,
+    mcopt::Trigger trigger (padThreshMSB, padThreshLSB, trigWidth, multThresh, multWindow, clock,
                             gain, discrFrac, padmap);
 
     std::cout << "Trigger threshold: " << trigger.getPadThresh() << " electrons" << std::endl;
@@ -108,6 +110,9 @@ int main(const int argc, const char** argv)
 
     // Instantiate a tracker so we can track particles.
     mcopt::Tracker tracker(massNum, chargeNum, eloss, efield, bfield);
+
+    // Create an EventGenerator to process the track into signals and peaks
+    mcopt::EventGenerator evtgen(pads, vd, clock, shape, massNum, ioniz, umegasGain);
 
     // Parse the GET config file. This gives us the set of pads excluded from the trigger.
     std::string xcfgPath = config["xcfg_path"].as<std::string>();
@@ -163,13 +168,17 @@ int main(const int argc, const char** argv)
         std::vector<std::pair<unsigned long, std::map<uint16_t, mcopt::Peak>>> results;
         std::vector<std::vector<unsigned long>> trigRows;
         std::vector<std::vector<unsigned long>> hitsRows;
+        std::vector<std::chrono::steady_clock::duration> times;
 
         #pragma omp for schedule(runtime)
         for (arma::uword i = 0; i < params.n_rows; i++) {
+
+            auto begin = std::chrono::steady_clock::now();
             auto tr = tracker.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                             params(i, 5));
             tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
-            auto hits = mcopt::makePeaksFromSimulation(pads, tr, vd, clock, massNum, ioniz, umegasGain);  // Includes uncalibration
+            auto hits = evtgen.makePeaksFromSimulation(tr);  // Includes uncalibration
+
             decltype(hits) validHits;  // The pads that were hit and not excluded or low-gain
             std::set_difference(hits.begin(), hits.end(),
                                 badPads.begin(), badPads.end(),
@@ -180,16 +189,23 @@ int main(const int argc, const char** argv)
 
             results.push_back(std::make_pair(i, validHits));
 
+            auto end = std::chrono::steady_clock::now();
+            times.push_back(end-begin);
+
             if (results.size() >= 1000 + threadNum*100) {
                 hitsRows = restructureResults(results, padmap);
+                auto total = std::accumulate(times.begin(), times.end(), std::chrono::steady_clock::duration::zero());
+                auto timePerIter = std::chrono::duration_cast<std::chrono::microseconds>(total / times.size());
                 #pragma omp critical
                 {
                     db.insertIntoTable(hitsTableName, hitsRows);
                     db.insertIntoTable(trigTableName, trigRows);
                     std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
+                    std::cout << "Took " << timePerIter.count() << " us per event" << std::endl;
                 }
                 results.clear();
                 trigRows.clear();
+                times.clear();
             }
         }
         hitsRows = restructureResults(results, padmap);
