@@ -157,7 +157,9 @@ int main(const int argc, const char** argv)
     // Iterate over the parameter sets, simulate each particle, and count the non-excluded pads
     // that were hit. Write this to the database.
 
-    #pragma omp parallel
+    unsigned numFinished = 0;
+
+    #pragma omp parallel shared(numFinished)
     {
         #ifdef _OPENMP
             int threadNum = omp_get_thread_num();
@@ -200,8 +202,10 @@ int main(const int argc, const char** argv)
                 {
                     db.insertIntoTable(hitsTableName, hitsRows);
                     db.insertIntoTable(trigTableName, trigRows);
-                    std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
-                    std::cout << "Took " << timePerIter.count() << " us per event" << std::endl;
+                    numFinished += results.size();
+                    std::cout << "(Thread " << threadNum << ") "
+                              << numFinished << "/" << params.n_rows << " events. ";
+                    std::cout << "(" << timePerIter.count() << " us/event)" << std::endl;
                 }
                 results.clear();
                 trigRows.clear();
@@ -209,12 +213,17 @@ int main(const int argc, const char** argv)
             }
         }
         hitsRows = restructureResults(results, padmap);
+        auto total = std::accumulate(times.begin(), times.end(), std::chrono::steady_clock::duration::zero());
+        auto timePerIter = std::chrono::duration_cast<std::chrono::microseconds>(total / times.size());
 
         #pragma omp critical
         {
             db.insertIntoTable(hitsTableName, hitsRows);
             db.insertIntoTable(trigTableName, trigRows);
-            std::cout << "Thread " << threadNum << " wrote " << results.size() << std::endl;
+            numFinished += results.size();
+            std::cout << "(Thread " << threadNum << ") "
+                      << numFinished << "/" << params.n_rows << " events. ";
+            std::cout << "(" << timePerIter.count() << " us/event)" << std::endl;
         }
     }
 
