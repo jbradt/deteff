@@ -17,8 +17,8 @@
 
 struct setMapCmp
 {
-    bool operator()(int i, const std::pair<mcopt::pad_t, mcopt::Peak>& p) const { return i < p.first; }
-    bool operator()(const std::pair<mcopt::pad_t, mcopt::Peak>& p, int i) const { return p.first < i; }
+    bool operator()(int i, const std::pair<mcopt::pad_t, arma::vec>& p) const { return i < p.first; }
+    bool operator()(const std::pair<mcopt::pad_t, arma::vec>& p, int i) const { return p.first < i; }
 };
 
 std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs, const mcopt::PadMap& padmap)
@@ -33,21 +33,24 @@ std::set<uint16_t> convertAddrsToPads(const std::vector<std::vector<int>>& addrs
     return pads;
 }
 
-static auto restructureResults(const std::vector<std::pair<unsigned long, std::map<uint16_t, mcopt::Peak>>>& res,
-                               const mcopt::PadMap& padmap)
+static std::vector<std::vector<unsigned long>> restructureResults(const std::vector<std::pair<unsigned long,
+                                                                  std::map<mcopt::pad_t, arma::vec>>>& res,
+                                                                  const mcopt::PadMap& padmap)
 {
     std::vector<std::vector<unsigned long>> hitsRows;
     for (const auto& pair : res) {
         // pairs in res are (evt id, map of pad->hits)
         const auto& evt_id = pair.first;
-        const auto& hitmap = pair.second;
+        const auto& event = pair.second;
 
-        for (const auto& entry : hitmap) {
-            const auto& pad = entry.first;
-            const auto& peak = entry.second;
+        for (const auto& channel : event) {
+            const auto& pad = channel.first;
+            const auto& sig = channel.second;
             unsigned cobo = padmap.reverseFind(pad).cobo;
             if (cobo != padmap.missingValue) {
-                hitsRows.push_back({evt_id, cobo, pad, peak.timeBucket, peak.amplitude});
+                arma::uword peakLoc = 0;
+                double peak = sig.max(peakLoc);
+                hitsRows.push_back({evt_id, cobo, pad, peakLoc, static_cast<unsigned long>(std::fabs(peak))});
             }
         }
     }
@@ -75,7 +78,7 @@ int main(const int argc, const char** argv)
     unsigned chargeNum = config["charge_num"].as<unsigned>();
     double ioniz = config["ioniz"].as<double>();
     arma::vec vd = config["vd"].as<arma::vec>();
-    double clock = config["clock"].as<double>();
+    double clock = config["clock"].as<double>() * 1e6;
     double shape = config["shape"].as<double>();
     double tilt = config["tilt"].as<double>() * M_PI / 180;
     arma::vec beamCtr = config["beam_center"].as<arma::vec>() / 1000;  // Need to convert to meters
@@ -99,7 +102,7 @@ int main(const int argc, const char** argv)
     double trigWidth = config["trigger_signal_width"].as<double>();
     unsigned long multThresh = config["multiplicity_threshold"].as<unsigned long>();
     unsigned long multWindow = config["multiplicity_window"].as<unsigned long>();
-    double gain = config["gain"].as<double>();
+    double gain = config["electronics_gain"].as<double>();
     double discrFrac = config["trigger_discriminator_fraction"].as<double>();
     unsigned umegasGain = config["micromegas_gain"].as<unsigned>();
     mcopt::Trigger trigger (padThreshMSB, padThreshLSB, trigWidth, multThresh, multWindow, clock,
@@ -112,7 +115,7 @@ int main(const int argc, const char** argv)
     mcopt::Tracker tracker(massNum, chargeNum, eloss, efield, bfield);
 
     // Create an EventGenerator to process the track into signals and peaks
-    mcopt::EventGenerator evtgen(pads, vd, clock, shape, massNum, ioniz, umegasGain);
+    mcopt::EventGenerator evtgen(pads, vd, clock, shape, massNum, ioniz, umegasGain, tilt, beamCtr);
 
     // Parse the GET config file. This gives us the set of pads excluded from the trigger.
     std::string xcfgPath = config["xcfg_path"].as<std::string>();
@@ -167,7 +170,7 @@ int main(const int argc, const char** argv)
             int threadNum = 0;
         #endif /* def _OPENMP */
 
-        std::vector<std::pair<unsigned long, std::map<uint16_t, mcopt::Peak>>> results;
+        std::vector<std::pair<unsigned long, std::map<uint16_t, arma::vec>>> results;
         std::vector<std::vector<unsigned long>> trigRows;
         std::vector<std::vector<unsigned long>> hitsRows;
         std::vector<std::chrono::steady_clock::duration> times;
@@ -178,18 +181,17 @@ int main(const int argc, const char** argv)
             auto begin = std::chrono::steady_clock::now();
             auto tr = tracker.trackParticle(params(i, 0), params(i, 1), params(i, 2), params(i, 3), params(i, 4),
                                             params(i, 5));
-            tr.unTiltAndRecenter(beamCtr, tilt);  // Transforms from uvw (tilted) system to xyz (untilted) system
-            auto hits = evtgen.makePeaksFromSimulation(tr);  // Includes uncalibration
+            auto event = evtgen.makeEvent(tr);  // Includes uncalibration
 
-            decltype(hits) validHits;  // The pads that were hit and not excluded or low-gain
-            std::set_difference(hits.begin(), hits.end(),
+            decltype(event) validEventSignals;  // The pads that were hit and not excluded or low-gain
+            std::set_difference(event.begin(), event.end(),
                                 badPads.begin(), badPads.end(),
-                                std::inserter(validHits, validHits.begin()), setMapCmp());
+                                std::inserter(validEventSignals, validEventSignals.begin()), setMapCmp());
 
-            bool trigRes = trigger.didTrigger(validHits);
+            bool trigRes = trigger.didTrigger(validEventSignals);
             trigRows.push_back({i, trigRes});
 
-            results.push_back(std::make_pair(i, validHits));
+            results.push_back(std::make_pair(i, validEventSignals));
 
             auto end = std::chrono::steady_clock::now();
             times.push_back(end-begin);

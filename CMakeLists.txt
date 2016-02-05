@@ -16,10 +16,9 @@ include_directories(SYSTEM ${pugixml_INCLUDE_DIRS})
 set(DETEFF_SOURCES parsers.cpp SQLiteWrapper.cpp)
 set(DETEFF_REQUIRED_LIBRARIES mcopt pugixml ${HDF5_CXX_LIBRARIES} ${ARMADILLO_LIBRARIES} ${YAMLCPP_LIBRARY} ${SQLITE3_LIBRARIES})
 
-# add_executable(deteff deteff.cpp ${DETEFF_SOURCES})
-# target_link_libraries(deteff ${DETEFF_REQUIRED_LIBRARIES})
-# target_compile_features(deteff PUBLIC cxx_return_type_deduction)
-# install(TARGETS deteff RUNTIME DESTINATION bin)
-#
-# add_executable(test_deteff catch_main.cpp test_sqlwrapper.cpp ${DETEFF_SOURCES})
-# target_link_libraries(test_deteff ${DETEFF_REQUIRED_LIBRARIES})
+add_executable(deteff deteff.cpp ${DETEFF_SOURCES})
+target_link_libraries(deteff ${DETEFF_REQUIRED_LIBRARIES})
+install(TARGETS deteff RUNTIME DESTINATION bin)
+
+add_executable(test_deteff catch_main.cpp test_sqlwrapper.cpp ${DETEFF_SOURCES})
+target_link_libraries(test_deteff ${DETEFF_REQUIRED_LIBRARIES})
