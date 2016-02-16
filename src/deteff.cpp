@@ -1,4 +1,4 @@
-#include "../mcopt/mcopt.h"
+#include <mcopt/mcopt.h>
 #include "parsers.h"
 #include "SQLiteWrapper.h"
 #include <armadillo>
