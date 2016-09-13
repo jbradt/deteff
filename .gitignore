@@ -29,3 +29,10 @@
 
 # Build directory
 build
+
+# Python stuff
+dist
+__pycache__
+*.pyc
+.ipynb_checkpoints
+*.egg-info
