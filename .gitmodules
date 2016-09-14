@@ -1,9 +1,6 @@
 [submodule "modules/mcopt"]
 	path = modules/mcopt
 	url = https://github.com/jbradt/mcopt.git
-[submodule "modules/atmc"]
-	path = modules/atmc
-	url = https://github.com/jbradt/atmc.git
 [submodule "modules/pytoc"]
 	path = modules/pytpc
 	url = https://github.com/attpc/pytpc.git
