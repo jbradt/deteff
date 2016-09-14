@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+
+from deteff import TriggerEfficiencySimulator, make_params
+from pytpc.utilities import SQLWriter
+from pytpc.gases import InterpolatedGas
+import logging
+import argparse
+import yaml
+import os
+import sys
+
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('[%(levelname)s:%(name)s] %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
+def read_config(config_path, patch_path_list=None):
+    logger.info('Parsing config file')
+
+    with open(os.path.abspath(config_path)) as f:
+        config = yaml.load(f)
+
+    if patch_path_list is not None:
+        for path in patch_path_list:
+            full_path = os.path.abspath(path)
+            with open(full_path, 'r') as f:
+                patch = yaml.load(f)
+            config.update(patch)
+            logger.info('Patched config with %s', os.path.basename(path))
+
+    return config
+
+
+def main():
+    parser = argparse.ArgumentParser(description='A program for simulating the AT-TPC trigger efficiency')
+    parser.add_argument('--num-evts', '-n', help='Number of events to simulate', type=int, default=5000)
+    parser.add_argument('--config-patch', '-p', help='Patch for config file', action='append')
+    parser.add_argument('config', help='Path to the config file')
+    parser.add_argument('output', help='Path to output database file')
+    args = parser.parse_args()
+
+    config = read_config(args.config, args.config_patch)
+
+    trigger = TriggerEfficiencySimulator(config)
+    writer = SQLWriter(args.output)
+
+    # hits_table_name = 'hits'
+    # hits_table_cols = [['evt_id', 'INTEGER PRIMARY KEY'],
+    #                    ['cobo', 'INTEGER'],
+    #                    ['pad', 'INTEGER'],
+    #                    ['tb', 'INTEGER'],
+    #                    ['num_elec', 'INTEGER']]
+    # writer.create_table(hits_table_name, hits_table_cols)
+
+    trig_table_name = 'trig'
+    trig_table_cols = [['evt_id', 'INTEGER PRIMARY KEY'],
+                       ['x0', 'REAL'],
+                       ['y0', 'REAL'],
+                       ['z0', 'REAL'],
+                       ['enu0', 'REAL'],
+                       ['azi0', 'REAL'],
+                       ['pol0', 'REAL'],
+                       ['trig', 'INTEGER'],
+                       ['num_pads_hit', 'INTEGER']]
+    writer.create_table(trig_table_name, trig_table_cols)
+
+    params = make_params(
+        beam_enu0=config['beam_enu0'],
+        beam_mass=config['beam_mass'],
+        beam_chg=config['beam_charge'],
+        proj_mass=config['mass_num'],
+        proj_chg=config['charge_num'],
+        gas=InterpolatedGas(config['gas_name'], config['gas_pressure']),
+        num_evts=args.num_evts,
+    )
+
+    for evtid, param_set in params.iterrows():
+        if evtid % 100 == 0:
+            logger.info('At event %d / %d', evtid, args.num_evts)
+        try:
+            trigres = trigger.run_track(param_set.values)
+        except Exception:
+            logger.exception('Simulation failed for event %d', evtid)
+            continue
+
+        trigres['evt_id'] = int(evtid)
+        trigres.update(param_set.to_dict())
+
+        try:
+            writer.write(trig_table_name, trigres)
+        except Exception:
+            logger.exception('Writing failed for event %d', evtid)
+
+
+if __name__ == '__main__':
+    import signal
+
+    def handle_signal(signum, stack_frame):
+        logger.critical('Received signal %d. Quitting.', signum)
+        sys.stdout.flush()
+        sys.exit(1)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGQUIT, handle_signal)
+
+    main()

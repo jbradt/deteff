@@ -1,4 +1,3 @@
-from atmc.mcopt_wrapper cimport EventGenerator, Tracker
 cimport numpy as np
 import numpy as np
 from libc.math cimport round
@@ -17,9 +16,6 @@ cdef _calculate_pad_threshold(int pad_thresh_LSB, int pad_thresh_MSB, double tri
 cdef class TriggerSimulator:
 
     cdef:
-        EventGenerator evtgen
-        Tracker tracker
-
         double write_clock
         double read_clock
         double master_clock
@@ -34,10 +30,7 @@ cdef class TriggerSimulator:
 
         dict padmap
 
-    def __cinit__(self, Tracker tracker, EventGenerator evtgen, dict config, dict padmap):
-        self.tracker = tracker
-        self.evtgen = evtgen
-
+    def __cinit__(self, dict config, dict padmap):
         self.write_clock = float(config['clock']) * 1e6
         self.read_clock = 25e6
         self.master_clock = 100e6
@@ -87,21 +80,20 @@ cdef class TriggerSimulator:
         cdef np.ndarray[np.double_t, ndim=2] result = np.zeros_like(trig, dtype=np.double)
 
         cdef int j, minIdx, maxIdx
-        for j in range(512):
+        cdef double accum
+        cdef double time_factor = self.read_clock / self.write_clock
+
+        for j in range(trig.shape[1]):
             minIdx = max(0, j - self.multiplicity_window)
             maxIdx = j
-            result[:, j] = np.sum(trig[:, minIdx:maxIdx], axis=1) * self.read_clock / self.write_clock
+
+            for i in range(trig.shape[0]):
+                accum = 0
+                for k in range(minIdx, maxIdx):
+                    accum += trig[i, k]
+                result[i, j] = accum * time_factor
 
         return result
 
-    def did_trigger(self, np.ndarray[np.double_t, ndim=1] params):
-        cdef np.ndarray[np.double_t, ndim=2] trmat = self.tracker.track_particle(params[0], params[1], params[2],
-                                                                                 params[3], params[4], params[5])
-
-        cdef dict evt = self.evtgen.make_event(trmat[:, :3], trmat[:, 4])
-
-        cdef np.ndarray[np.double_t, ndim=2] trig, mult
-        trig = self.find_trigger_signals(evt)
-        mult = self.find_multiplicity_signals(trig)
-
+    cpdef bint did_trigger(self, np.ndarray[np.double_t, ndim=2] mult):
         return np.any(np.max(mult, axis=1) > self.multiplicity_threshold)

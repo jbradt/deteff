@@ -22,5 +22,5 @@ setup(name='deteff',
       version='1.0',
       description='AT-TPC trigger efficiency simulator',
       packages=['deteff'],
-      ext_modules=cythonize(exts),
+      ext_modules=cythonize(exts, annotate=True),
       )
