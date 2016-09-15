@@ -1,39 +1,43 @@
 from .trigger import TriggerSimulator
 from pytpc.fitting.mixins import TrackerMixin, EventGeneratorMixin
 from pytpc.relativity import find_proton_params
-from pytpc.utilities import find_vertex_energy
+from pytpc.utilities import find_vertex_energy, read_lookup_table, find_exclusion_region
 from pytpc.constants import pi, p_mc2
 import numpy as np
 import pandas as pd
-import csv
+import os
 import logging
 
-__all__ = ['TriggerSimulator', 'TriggerEfficiencySimulator', 'read_padmap', 'make_params']
+__all__ = ['TriggerSimulator', 'TriggerEfficiencySimulator', 'make_params']
 
 logger = logging.getLogger(__name__)
 
 
-def read_padmap(path):
-    padmap = {}
-    with open(path, 'r') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            row = [int(v) for v in row]
-            padmap[row[-1]] = tuple(row[:-1])
-    return padmap
-
-
 class TriggerEfficiencySimulator(EventGeneratorMixin, TrackerMixin):
-    def __init__(self, config):
+    def __init__(self, config, xcfg_path=None):
         super().__init__(config)
 
-        self.padmap = read_padmap(config['padmap_path'])
+        self.padmap = read_lookup_table(config['padmap_path'])  # maps (cobo, asad, aget, ch) -> pad
+        self.reverse_padmap = {v: k for k, v in self.padmap.items()}  # maps pad -> (cobo, asad, aget, ch)
+        if xcfg_path is not None:
+            self.excluded_pads, self.low_gain_pads = find_exclusion_region(xcfg_path, self.padmap)
+            logger.info('Excluding pads from regions in file %s', os.path.basename(xcfg_path))
+        else:
+            self.excluded_pads = []
+            self.low_gain_pads = []
 
-        self.trigger = TriggerSimulator(config, self.padmap)
+        self.badpads = set(self.excluded_pads).union(set(self.low_gain_pads))
+        logger.info('%d pads will be excluded', len(self.badpads))
+
+        self.trigger = TriggerSimulator(config, self.reverse_padmap)
 
     def run_track(self, params):
         tr = self.tracker.track_particle(*params)
         evt = self.evtgen.make_event(tr[:, :3], tr[:, 4])
+
+        for k in self.badpads.intersection(evt.keys()):
+            del evt[k]
+
         trig = self.trigger.find_trigger_signals(evt)
         mult = self.trigger.find_multiplicity_signals(trig)
         did_trig = self.trigger.did_trigger(mult)

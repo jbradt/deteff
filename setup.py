@@ -18,9 +18,11 @@ ext_kwargs = dict(include_dirs=[np.get_include()],
 
 exts = [Extension('deteff.trigger', ['deteff/trigger.pyx'], **ext_kwargs)]
 
-setup(name='deteff',
-      version='1.0',
-      description='AT-TPC trigger efficiency simulator',
-      packages=['deteff'],
-      ext_modules=cythonize(exts, annotate=True),
-      )
+setup(
+    name='deteff',
+    version='1.0',
+    description='AT-TPC trigger efficiency simulator',
+    packages=['deteff'],
+    scripts=['bin/rundeteff'],
+    ext_modules=cythonize(exts, annotate=True),
+)
