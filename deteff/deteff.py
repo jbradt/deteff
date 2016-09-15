@@ -2,7 +2,7 @@ from .trigger import TriggerSimulator
 from pytpc.fitting.mixins import TrackerMixin, EventGeneratorMixin
 from pytpc.relativity import find_proton_params
 from pytpc.utilities import find_vertex_energy, read_lookup_table, find_exclusion_region
-from pytpc.constants import pi, p_mc2
+from pytpc.constants import pi, p_mc2, degrees
 import numpy as np
 import pandas as pd
 import os
@@ -52,12 +52,23 @@ class TriggerEfficiencySimulator(EventGeneratorMixin, TrackerMixin):
 
 def make_params(beam_enu0, beam_mass, beam_chg, proj_mass, proj_chg, gas, num_evts):
     params = pd.DataFrame(0, columns=('x0', 'y0', 'z0', 'enu0', 'azi0', 'pol0'), index=range(num_evts))
+    params.x0 = np.random.normal(0, 0.010, size=num_evts)
+    params.y0 = np.random.normal(0, 0.010, size=num_evts)
     params.z0 = np.random.uniform(0, 1, size=num_evts)
     params.azi0 = np.random.uniform(0, 2 * pi, size=num_evts)
-    params.pol0 = np.random.uniform(pi / 2, pi, size=num_evts)
+    params.pol0 = np.random.uniform(pi / 2, pi - 10 * degrees, size=num_evts)
 
     vert_ens = find_vertex_energy(params.z0, beam_enu0, beam_mass, beam_chg, gas)  # the total kinetic energies
+    vert_ens[np.where(vert_ens > beam_enu0 * beam_mass)] = 0.0
     params.enu0 = find_proton_params(pi - params.pol0, beam_mass * p_mc2, proj_mass * p_mc2,
                                      proj_mass * p_mc2, beam_mass * p_mc2, vert_ens)[1] - proj_mass * p_mc2
+
+    while np.any(params.enu0 < 1.0):
+        params = params[params.enu0 >= 1.0].copy()
+        num_good = len(params)
+        params.index = range(num_good)
+        replacements = make_params(beam_enu0, beam_mass, beam_chg, proj_mass, proj_chg, gas, num_evts - num_good)
+        replacements.index = range(num_good, num_evts)
+        params = pd.concat((params, replacements), axis=0)
 
     return params

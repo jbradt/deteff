@@ -3,30 +3,26 @@ import numpy as np
 from libc.math cimport round
 
 
-cdef double e_charge = 1.602176565e-19
-
-
-cdef _calculate_pad_threshold(int pad_thresh_LSB, int pad_thresh_MSB, double trig_discr_frac, double gain):
+cdef _calculate_pad_threshold(int pad_thresh_LSB, int pad_thresh_MSB, double trig_discr_frac):
     cdef double pt = ((pad_thresh_MSB << 4) + pad_thresh_LSB)
     cdef double discrMax = trig_discr_frac * 4096  # in data ADC bins
-    cdef double elecPerBin = gain / 4096 / e_charge
-    return (pt / 128) * discrMax * elecPerBin
+    return (pt / 128) * discrMax
 
 
 cdef class TriggerSimulator:
 
     cdef:
-        double write_clock
-        double read_clock
-        double master_clock
+        readonly double write_clock
+        readonly double read_clock
+        readonly double master_clock
 
-        double pad_threshold
+        readonly double pad_threshold
 
-        int trigger_width
-        double trigger_height
+        readonly int trigger_width
+        readonly double trigger_height
 
-        int multiplicity_threshold
-        int multiplicity_window
+        readonly int multiplicity_threshold
+        readonly int multiplicity_window
 
         dict padmap
 
@@ -38,8 +34,7 @@ cdef class TriggerSimulator:
         cdef int pad_thresh_MSB = int(config['pad_thresh_MSB'])
         cdef int pad_thresh_LSB = int(config['pad_thresh_LSB'])
         cdef double trig_discr_frac = float(config['trigger_discriminator_fraction'])
-        cdef double gain = float(config['electronics_gain'])
-        self.pad_threshold = _calculate_pad_threshold(pad_thresh_LSB, pad_thresh_MSB, trig_discr_frac, gain)
+        self.pad_threshold = _calculate_pad_threshold(pad_thresh_LSB, pad_thresh_MSB, trig_discr_frac)
 
         self.trigger_width = <int> round(float(config['trigger_signal_width']) * self.write_clock)
         self.trigger_height = 48
